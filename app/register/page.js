@@ -66,8 +66,8 @@ const RegistrationPage = () => {
     setLoading(true);
     const result = await registerUser({
         ...formData,
-        categoryId: parseInt(formData.categoryId),
-        classId: parseInt(formData.classId)
+        categoryId: formData.categoryId ? parseInt(formData.categoryId) : null,
+        classId: formData.classId ? parseInt(formData.classId) : null
     });
     setLoading(false);
 

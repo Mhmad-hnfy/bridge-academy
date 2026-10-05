@@ -14,4 +14,5 @@ add column if not exists gender text,
 add column if not exists birth_date text,
 add column if not exists notes text,
 add column if not exists father_job text,
-add column if not exists father_phone text;
+add column if not exists father_phone text,
+add column if not exists national_id text;
