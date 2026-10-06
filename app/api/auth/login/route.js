@@ -90,19 +90,28 @@ export async function POST(request) {
     try {
       if (user.role !== "admin") {
         const maxAllowed = parseInt(user.max_devices) || 1;
-        const { data: existingSessions, error: sessErr } = await supabase
-          .from("user_sessions")
-          .select("id, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: true });
 
-        if (!sessErr && existingSessions && existingSessions.length >= maxAllowed) {
-          // Calculate number of older sessions to invalidate
-          const kickCount = existingSessions.length - maxAllowed + 1;
-          const idsToKick = existingSessions.slice(0, kickCount).map((s) => s.id);
-          if (idsToKick.length > 0) {
-            await supabase.from("user_sessions").delete().in("id", idsToKick);
-          }
+        // Fetch active sessions (active in the last 30 minutes)
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        const { data: activeSessions, error: sessErr } = await supabase
+          .from("user_sessions")
+          .select("id, device_name, last_active")
+          .eq("user_id", user.id)
+          .gte("last_active", thirtyMinutesAgo)
+          .order("last_active", { ascending: false });
+
+        if (!sessErr && activeSessions && activeSessions.length >= maxAllowed) {
+          // Device limit reached — reject this login
+          const deviceList = activeSessions
+            .map((s) => s.device_name || "جهاز غير معروف")
+            .join("، ");
+          return NextResponse.json(
+            {
+              success: false,
+              message: `وصلت للحد الأقصى من الأجهزة (${maxAllowed}). الأجهزة النشطة: ${deviceList}. اطلب من الإدارة إزالة الجهاز القديم.`,
+            },
+            { status: 403 }
+          );
         }
       }
 
