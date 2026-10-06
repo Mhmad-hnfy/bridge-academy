@@ -1033,7 +1033,6 @@ export default function LessonsManagement() {
                           required
                       />
                   </div>
-                </div>
 
                 {/* Image and PDF Upload */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
