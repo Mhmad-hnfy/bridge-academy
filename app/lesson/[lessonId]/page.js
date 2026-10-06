@@ -55,9 +55,6 @@ export default function LessonDetailPage({ params }) {
     (unlockedChapters || []).some(u => u.userId === currentUser.id && u.chapterId === chapter.id) ||
     Number(chapter.price || 0) === 0
   );
-  const userView = (viewCounts || []).find(v => v.userId === currentUser?.id && v.lessonId === lessonId);
-  const currentViews = userView ? userView.count : 0;
-  const maxViews = lesson?.maxViews || 5;
 
   const handleRedeemCode = async (e) => {
     e.preventDefault();
@@ -189,10 +186,7 @@ export default function LessonDetailPage({ params }) {
 
   useEffect(() => {
     if (isUnlocked && currentUser && lessonId) {
-      // Increment view only if under limit
-      if (currentViews < maxViews) {
-         incrementLessonView(currentUser.id, lessonId);
-      }
+      incrementLessonView(currentUser.id, lessonId);
     }
   }, [isUnlocked, lessonId]);
 
@@ -468,40 +462,6 @@ export default function LessonDetailPage({ params }) {
           </div>
         </div>
       </div>
-    );
-  }
-
-  if (currentViews >= maxViews) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-8 text-center" dir="rtl">
-            <div className="max-w-md w-full">
-                <div className="w-24 h-24 bg-[#C4963A]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#C4963A]/20">
-                    <Eye className="w-12 h-12 text-[#C4963A]" />
-                </div>
-                <h1 className="text-3xl font-black mb-4">انتهت عدد المشاهدات</h1>
-                <p className="text-slate-400 mb-8 font-bold">لقد استنفدت الحد الأقصى لمشاهدة هذا الفيديو ({maxViews} مشاهدات). يمكنك إدخال كود جديد لتجديد المشاهدات.</p>
-                
-                <form onSubmit={handleRedeemCode} className="space-y-4 mb-8">
-                    <input 
-                        type="text" 
-                        placeholder="ادخل كود التجديد هنا..." 
-                        value={redeemCode}
-                        onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-center text-xl font-mono font-black text-[#C4963A] focus:outline-none focus:ring-2 focus:ring-[#C4963A]/50 transition-all placeholder:text-slate-600"
-                        required
-                    />
-                    <button 
-                        type="submit" 
-                        disabled={isRedeeming}
-                        className="w-full py-4 bg-gradient-to-r from-[#C4963A] to-[#D4A84A] rounded-2xl font-black shadow-lg shadow-[#C4963A]/20 hover:from-[#A87C24] hover:to-[#C4963A] transition-all disabled:opacity-50"
-                    >
-                        {isRedeeming ? "جاري التحقق..." : "تفعيل وشحن المشاهدات الآن"}
-                    </button>
-                </form>
-
-                <button onClick={() => router.back()} className="text-slate-500 hover:text-white font-bold transition-colors">العودة للخلف</button>
-            </div>
-        </div>
     );
   }
 
@@ -864,10 +824,6 @@ export default function LessonDetailPage({ params }) {
                  <p className="text-[#C4963A] text-sm mb-6 font-bold">احرص على التركيز أثناء الشرح</p>
                  
                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-white/10 rounded-2xl backdrop-blur-md">
-                       <span className="text-sm font-bold opacity-70">عدد المشاهدات</span>
-                       <span className="font-black text-xl">{currentViews}/{maxViews}</span>
-                    </div>
                     <div className="flex items-center justify-between p-4 bg-white/10 rounded-2xl backdrop-blur-md">
                        <span className="text-sm font-bold opacity-70">سرعة التشغيل</span>
                        <div className="flex gap-2">

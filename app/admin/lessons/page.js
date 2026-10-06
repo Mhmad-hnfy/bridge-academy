@@ -81,10 +81,9 @@ export default function LessonsManagement() {
     youtubeLink: "",
     banner: "",
     pdfFile: "", // Base64 or URL
-    attachmentLink: "", // External URL (e.g. Quiz, Homework, Google Drive)
-    attachmentTitle: "", // Title/Label for the link
-    status: "نشط",
-    maxViews: 5
+    attachmentLink: "",
+    attachmentTitle: "",
+    status: "نشط"
   });
 
   // Dynamic filter lists for top filter bar
@@ -288,8 +287,7 @@ export default function LessonsManagement() {
       pdfFile: "",
       attachmentLink: "",
       attachmentTitle: "",
-      status: "نشط",
-      maxViews: 5
+      status: "نشط"
     });
     setEditingLesson(null);
   };
@@ -310,8 +308,7 @@ export default function LessonsManagement() {
       pdfFile: lesson.pdfFile || "",
       attachmentLink: lesson.attachmentLink || lesson.attachment_link || "",
       attachmentTitle: lesson.attachmentTitle || lesson.attachment_title || "",
-      status: lesson.status || "نشط",
-      maxViews: lesson.maxViews || 5
+      status: lesson.status || "نشط"
     });
     setIsModalOpen(true);
   };
@@ -581,7 +578,6 @@ export default function LessonsManagement() {
                                                 <th className="pb-3 px-4 text-slate-500">اسم الدرس</th>
                                                 <th className="pb-3 px-4 text-slate-500">رابط الفيديو</th>
                                                 <th className="pb-3 px-4 text-slate-500">المرفقات والروابط</th>
-                                                <th className="pb-3 px-4 text-slate-500">المشاهدات / الحد</th>
                                                 <th className="pb-3 px-4 text-slate-500">الحالة</th>
                                                 <th className="pb-3 px-4 text-center text-slate-500">التحكم</th>
                                               </tr>
@@ -669,15 +665,6 @@ export default function LessonsManagement() {
                                                       ) : !lesson.attachmentLink && !lesson.attachment_link && (
                                                         <span className="text-slate-400 text-xs font-bold">لا يوجد مرفق</span>
                                                       )}
-                                                    </div>
-                                                  </td>
-
-                                                  {/* Views Counter */}
-                                                  <td className="py-3.5 px-4 text-sm font-bold text-slate-600">
-                                                    <div className="flex items-center gap-1.5">
-                                                      <span className="px-2 py-0.5 bg-slate-100 rounded-md font-black text-slate-700 text-xs">{lesson.views || 0}</span>
-                                                      <span className="text-slate-300">/</span>
-                                                      <span className="px-2 py-0.5 bg-[#FDF8F0] text-[#C4963A] rounded-md font-black text-xs">{lesson.maxViews || 5}</span>
                                                     </div>
                                                   </td>
 
@@ -905,13 +892,10 @@ export default function LessonsManagement() {
                         </div>
 
                         {/* Counters */}
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1">
+                        <div className="flex items-center text-xs font-bold text-slate-500 px-1">
                           <span className="flex items-center gap-1.5">
                             <Eye className="w-4 h-4 text-slate-400" />
                             شوهد {lesson.views || 0} مرات
-                          </span>
-                          <span className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded-lg text-[10px] font-black">
-                            الحد: {lesson.maxViews || 5} مشاهدات
                           </span>
                         </div>
                       </div>
@@ -1037,8 +1021,7 @@ export default function LessonsManagement() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* YouTube Video URL */}
+                  {/* YouTube only - full width */}
                   <div className="space-y-2">
                       <label className="text-sm font-black text-slate-700 block pr-2">رابط فيديو اليوتيوب</label>
                       <input
@@ -1047,20 +1030,6 @@ export default function LessonsManagement() {
                           className="w-full px-4 py-4 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-slate-700"
                           value={formData.youtubeLink}
                           onChange={(e) => setFormData({...formData, youtubeLink: e.target.value})}
-                          required
-                      />
-                  </div>
-
-                  {/* Max Student Views */}
-                  <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 block pr-2">حد المشاهدات لكل طالب</label>
-                      <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          className="w-full px-4 py-4 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-slate-700"
-                          value={formData.maxViews}
-                          onChange={(e) => setFormData({...formData, maxViews: parseInt(e.target.value) || 5})}
                           required
                       />
                   </div>
