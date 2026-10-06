@@ -81,6 +81,8 @@ export default function LessonsManagement() {
     youtubeLink: "",
     banner: "",
     pdfFile: "", // Base64 or URL
+    attachmentLink: "", // External URL (e.g. Quiz, Homework, Google Drive)
+    attachmentTitle: "", // Title/Label for the link
     status: "نشط",
     maxViews: 5
   });
@@ -284,6 +286,8 @@ export default function LessonsManagement() {
       youtubeLink: "",
       banner: "",
       pdfFile: "",
+      attachmentLink: "",
+      attachmentTitle: "",
       status: "نشط",
       maxViews: 5
     });
@@ -304,6 +308,8 @@ export default function LessonsManagement() {
       youtubeLink: lesson.youtubeLink || "",
       banner: lesson.banner || "",
       pdfFile: lesson.pdfFile || "",
+      attachmentLink: lesson.attachmentLink || lesson.attachment_link || "",
+      attachmentTitle: lesson.attachmentTitle || lesson.attachment_title || "",
       status: lesson.status || "نشط",
       maxViews: lesson.maxViews || 5
     });
@@ -574,7 +580,7 @@ export default function LessonsManagement() {
                                                 <th className="pb-3 px-2 w-8"></th>
                                                 <th className="pb-3 px-4 text-slate-500">اسم الدرس</th>
                                                 <th className="pb-3 px-4 text-slate-500">رابط الفيديو</th>
-                                                <th className="pb-3 px-4 text-slate-500">الملف المرفق</th>
+                                                <th className="pb-3 px-4 text-slate-500">المرفقات والروابط</th>
                                                 <th className="pb-3 px-4 text-slate-500">المشاهدات / الحد</th>
                                                 <th className="pb-3 px-4 text-slate-500">الحالة</th>
                                                 <th className="pb-3 px-4 text-center text-slate-500">التحكم</th>
@@ -637,20 +643,33 @@ export default function LessonsManagement() {
                                                     )}
                                                   </td>
 
-                                                  {/* PDF */}
+                                                  {/* Attachments & Links */}
                                                   <td className="py-3.5 px-4">
-                                                    {lesson.pdfFile ? (
-                                                      <a
-                                                        href={lesson.pdfFile}
-                                                        download={`${lesson.name}.pdf`}
-                                                        className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-black transition-colors"
-                                                      >
-                                                        <FileText className="w-4 h-4" />
-                                                        ملف ملخص الدرس
-                                                      </a>
-                                                    ) : (
-                                                      <span className="text-slate-400 text-xs font-bold">لا يوجد مرفق</span>
-                                                    )}
+                                                    <div className="flex flex-col gap-1.5 items-start">
+                                                      {(lesson.attachmentLink || lesson.attachment_link) && (
+                                                        <a
+                                                          href={lesson.attachmentLink || lesson.attachment_link}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg text-xs font-black transition-colors"
+                                                        >
+                                                          <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                                                          <span>{lesson.attachmentTitle || lesson.attachment_title || "رابط إضافي"}</span>
+                                                        </a>
+                                                      )}
+                                                      {lesson.pdfFile ? (
+                                                        <a
+                                                          href={lesson.pdfFile}
+                                                          download={`${lesson.name}.pdf`}
+                                                          className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-black transition-colors"
+                                                        >
+                                                          <FileText className="w-4 h-4" />
+                                                          ملف PDF
+                                                        </a>
+                                                      ) : !lesson.attachmentLink && !lesson.attachment_link && (
+                                                        <span className="text-slate-400 text-xs font-bold">لا يوجد مرفق</span>
+                                                      )}
+                                                    </div>
                                                   </td>
 
                                                   {/* Views Counter */}
@@ -915,6 +934,9 @@ export default function LessonsManagement() {
                         </button>
                         
                         <div className="mr-auto flex items-center gap-2">
+                          {(lesson.attachmentLink || lesson.attachment_link) && (
+                            <ExternalLink className="w-5 h-5 text-emerald-500 stroke-[2.5]" title="يحتوي على رابط إضافي" />
+                          )}
                           {lesson.pdfFile && (
                             <FileText className="w-5 h-5 text-blue-500 stroke-[2.5]" title="يحتوي على ملف PDF" />
                           )}
@@ -1072,6 +1094,39 @@ export default function LessonsManagement() {
                             <span className="text-[10px] text-slate-400 font-bold mt-1">يقبل الملفات بصيغة PDF فقط</span>
                         </div>
                     </div>
+                </div>
+
+                {/* External Link Section (رابط يظهر تحت الفيديو للطالب) */}
+                <div className="bg-[#FDF8F0]/70 border-2 border-[#C4963A]/25 p-6 rounded-[32px] space-y-4">
+                  <div className="flex items-center gap-2 text-[#C4963A] font-black text-base">
+                    <ExternalLink className="w-5 h-5 text-[#C4963A]" />
+                    <span>رابط ملحق بالدرس يظهر تحت الفيديو للطالب (اختياري)</span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-bold -mt-2 leading-relaxed">
+                    ضع رابط امتحان إلكتروني (Google Form / Quiz)، أو رابط شيت واجب، أو رابط ملف Drive ليظهر كزر مباشر وأنيق للطالب تحت المشغل.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-black text-slate-700 block pr-1">رابط الصفحة (URL)</label>
+                      <input
+                        type="url"
+                        placeholder="https://forms.gle/... أو https://drive.google.com/..."
+                        className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-[#C4963A] focus:outline-none font-bold text-sm text-slate-700 bg-white"
+                        value={formData.attachmentLink}
+                        onChange={(e) => setFormData({ ...formData, attachmentLink: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-black text-slate-700 block pr-1">عنوان / نص الزر</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: رابط الامتحان الإلكتروني أو رابط الواجب"
+                        className="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-[#C4963A] focus:outline-none font-bold text-sm text-slate-700 bg-white"
+                        value={formData.attachmentTitle}
+                        onChange={(e) => setFormData({ ...formData, attachmentTitle: e.target.value })}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Lesson Active Status Option */}

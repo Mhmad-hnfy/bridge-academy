@@ -30,12 +30,23 @@ const LoginPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "phone") {
+      setFormData((prev) => ({ ...prev, [name]: value.replace(/\D/g, "").slice(0, 11) }));
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    const phoneRegex = /^01[0-9]{9}$/;
+    if (!phoneRegex.test(formData.phone)) {
+      setError("يجب أن يتكون رقم الهاتف من 11 رقماً ويبدأ بـ 01");
+      return;
+    }
+
     const result = await loginUser(formData.phone, formData.password);
     if (result.success) {
       if (result.user?.role === "admin") {
@@ -105,10 +116,12 @@ const LoginPage = () => {
                 <Phone className={iconClass} size={20} />
                 <input
                   type="tel"
+                  inputMode="numeric"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  placeholder="01xxxxxxxxx"
+                  placeholder="01xxxxxxxxx (11 رقم)"
+                  maxLength={11}
                   required
                   className={inputClass}
                 />

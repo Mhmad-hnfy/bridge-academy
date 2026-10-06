@@ -29,6 +29,7 @@ const RegistrationPage = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [registeredName, setRegisteredName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (currentUser) {
@@ -53,13 +54,67 @@ const RegistrationPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "phone" || name === "whatsapp") {
+      // أرقام فقط والحد الأقصى 11 رقماً
+      const numericOnly = value.replace(/\D/g, "").slice(0, 11);
+      setFormData((prev) => ({ ...prev, [name]: numericOnly }));
+      if (error) setError("");
+      return;
+    }
+    if (name === "nationalId") {
+      // أرقام فقط والحد الأقصى 14 رقماً
+      const numericOnly = value.replace(/\D/g, "").slice(0, 14);
+      setFormData((prev) => ({ ...prev, [name]: numericOnly }));
+      if (error) setError("");
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+
+    // التحقق من رقم الهاتف: 11 رقماً ويبدأ بـ 01
+    const phoneRegex = /^01[0-9]{9}$/;
+    if (!formData.phone) {
+      setError("رقم الهاتف مطلوب");
+      return;
+    }
+    if (!phoneRegex.test(formData.phone)) {
+      setError("يجب أن يتكون رقم الهاتف من 11 رقماً ويبدأ بـ 01 (أرقام فقط)");
+      return;
+    }
+
+    // التحقق من رقم الواتساب: 11 رقماً ويبدأ بـ 01
+    if (!formData.whatsapp) {
+      setError("رقم الواتساب مطلوب");
+      return;
+    }
+    if (!phoneRegex.test(formData.whatsapp)) {
+      setError("يجب أن يتكون رقم الواتساب من 11 رقماً ويبدأ بـ 01 (أرقام فقط)");
+      return;
+    }
+
+    // التحقق من الرقم القومي: 14 رقماً وأرقام فقط
+    const nationalIdRegex = /^[0-9]{14}$/;
+    if (!formData.nationalId) {
+      setError("الرقم القومي مطلوب");
+      return;
+    }
+    if (!nationalIdRegex.test(formData.nationalId)) {
+      setError("يجب أن يتكون الرقم القومي من 14 رقماً (أرقام فقط)");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError("كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
-      alert("كلمتا المرور غير متطابقتين");
+      setError("كلمتا المرور غير متطابقتين");
       return;
     }
     
@@ -76,7 +131,7 @@ const RegistrationPage = () => {
         setShowSuccess(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-        alert(result.message);
+        setError(result.message);
     }
   };
 
@@ -138,6 +193,12 @@ const RegistrationPage = () => {
           </div>
 
           <form onSubmit={handleSubmit}>
+            {error && (
+              <div className="p-4 mb-6 bg-rose-500/15 border border-rose-500/40 text-rose-300 text-sm font-bold rounded-2xl text-center animate-in fade-in slide-in-from-top-2">
+                {error}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-x-6">
               <div className={inputContainerClass}>
                 <label className={labelClass}>الاسم الكامل</label>
@@ -149,27 +210,82 @@ const RegistrationPage = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                 <div className={inputContainerClass}>
-                    <label className={labelClass}>رقم الهاتف (للدخول)</label>
-                    <div className="relative">
-                    <Phone className={iconClass} size={20} />
-                    <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="01xxxxxxxxx" required className={inputClass} />
+                    <div className="flex justify-between items-center mb-2 mr-1">
+                      <label className="text-slate-200 text-sm font-semibold">رقم الهاتف (للدخول)</label>
+                      <span className={`text-xs font-mono font-bold ${formData.phone.length === 11 && formData.phone.startsWith("01") ? "text-emerald-400" : "text-slate-400"}`}>
+                        {formData.phone.length}/11 رقم
+                      </span>
                     </div>
+                    <div className="relative">
+                      <Phone className={iconClass} size={20} />
+                      <input 
+                        type="tel" 
+                        inputMode="numeric"
+                        name="phone" 
+                        value={formData.phone} 
+                        onChange={handleChange} 
+                        placeholder="01xxxxxxxxx (11 رقم)" 
+                        maxLength={11}
+                        required 
+                        className={`${inputClass} ${formData.phone && (!formData.phone.startsWith("01") || (formData.phone.length === 11 && !/^01\d{9}$/.test(formData.phone))) ? "border-rose-500/60 focus:border-rose-500" : ""}`} 
+                      />
+                    </div>
+                    {formData.phone && !formData.phone.startsWith("01") && (
+                      <p className="text-rose-400 text-xs mt-1.5 mr-1 font-semibold">يجب أن يبدأ رقم الهاتف بـ 01</p>
+                    )}
                 </div>
+
                 <div className={inputContainerClass}>
-                    <label className={labelClass}>رقم الواتساب</label>
-                    <div className="relative">
-                    <PlusCircle className={iconClass} size={20} />
-                    <input type="tel" name="whatsapp" value={formData.whatsapp} onChange={handleChange} placeholder="01xxxxxxxxx" required className={inputClass} />
+                    <div className="flex justify-between items-center mb-2 mr-1">
+                      <label className="text-slate-200 text-sm font-semibold">رقم الواتساب</label>
+                      <span className={`text-xs font-mono font-bold ${formData.whatsapp.length === 11 && formData.whatsapp.startsWith("01") ? "text-emerald-400" : "text-slate-400"}`}>
+                        {formData.whatsapp.length}/11 رقم
+                      </span>
                     </div>
+                    <div className="relative">
+                      <PlusCircle className={iconClass} size={20} />
+                      <input 
+                        type="tel" 
+                        inputMode="numeric"
+                        name="whatsapp" 
+                        value={formData.whatsapp} 
+                        onChange={handleChange} 
+                        placeholder="01xxxxxxxxx (11 رقم)" 
+                        maxLength={11}
+                        required 
+                        className={`${inputClass} ${formData.whatsapp && (!formData.whatsapp.startsWith("01") || (formData.whatsapp.length === 11 && !/^01\d{9}$/.test(formData.whatsapp))) ? "border-rose-500/60 focus:border-rose-500" : ""}`} 
+                      />
+                    </div>
+                    {formData.whatsapp && !formData.whatsapp.startsWith("01") && (
+                      <p className="text-rose-400 text-xs mt-1.5 mr-1 font-semibold">يجب أن يبدأ رقم الواتساب بـ 01</p>
+                    )}
                 </div>
               </div>
 
               <div className={inputContainerClass}>
-                <label className={labelClass}>الرقم القومي</label>
+                <div className="flex justify-between items-center mb-2 mr-1">
+                  <label className="text-slate-200 text-sm font-semibold">الرقم القومي (أرقام فقط)</label>
+                  <span className={`text-xs font-mono font-bold ${formData.nationalId.length === 14 ? "text-emerald-400" : "text-slate-400"}`}>
+                    {formData.nationalId.length}/14 رقم
+                  </span>
+                </div>
                 <div className="relative">
                   <CreditCard className={iconClass} size={20} />
-                  <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} placeholder="14 رقم" maxLength={14} required className={inputClass} />
+                  <input 
+                    type="text" 
+                    inputMode="numeric"
+                    name="nationalId" 
+                    value={formData.nationalId} 
+                    onChange={handleChange} 
+                    placeholder="الرقم القومي المكون من 14 رقماً" 
+                    maxLength={14} 
+                    required 
+                    className={`${inputClass} ${formData.nationalId && formData.nationalId.length === 14 && !/^\d{14}$/.test(formData.nationalId) ? "border-rose-500/60 focus:border-rose-500" : ""}`} 
+                  />
                 </div>
+                {formData.nationalId && formData.nationalId.length > 0 && formData.nationalId.length < 14 && (
+                  <p className="text-slate-400 text-xs mt-1.5 mr-1 font-medium">متبقي {14 - formData.nationalId.length} أرقام لاكتمال الرقم القومي</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">

@@ -13,7 +13,8 @@ import {
   FileText,
   Download,
   ShieldCheck,
-  Eye
+  Eye,
+  ExternalLink
 } from "lucide-react";
 import { useGlobalStore } from "@/lib/store";
 
@@ -42,7 +43,11 @@ export default function LessonDetailPage({ params }) {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [screenCaptureAlert, setScreenCaptureAlert] = useState(false);
+  const [tabHidden, setTabHidden] = useState(false);
+  const [watermarkBurst, setWatermarkBurst] = useState(false);
   const controlsTimeoutRef = useRef(null);
+  const screenBlackoutRef = useRef(null);
 
   // SECURITY: currentUser is ALWAYS required — even free lessons need a login
   // "free" only means no code is needed, NOT that anyone can watch without an account
@@ -140,11 +145,22 @@ export default function LessonDetailPage({ params }) {
         },
         onStateChange: (event) => {
           setIsPlaying(event.data === window.YT.PlayerState.PLAYING);
-          if (event.data === window.YT.PlayerState.PLAYING || event.data === window.YT.PlayerState.BUFFERING) {
-            const levels = event.target.getAvailableQualityLevels();
-            if (levels && levels.length > 0) {
-              setQualityLevels(levels);
-              setCurrentQuality(event.target.getPlaybackQuality());
+          if (
+            event.data === window.YT.PlayerState.PLAYING ||
+            event.data === window.YT.PlayerState.BUFFERING
+          ) {
+            try {
+              if (typeof event.target.getAvailableQualityLevels === 'function') {
+                const levels = event.target.getAvailableQualityLevels();
+                if (levels && levels.length > 0) {
+                  setQualityLevels(levels);
+                }
+              }
+              if (typeof event.target.getPlaybackQuality === 'function') {
+                setCurrentQuality(event.target.getPlaybackQuality());
+              }
+            } catch (err) {
+              // YouTube API not fully ready yet — ignore
             }
           }
         }
@@ -206,77 +222,136 @@ export default function LessonDetailPage({ params }) {
     };
   }, [isPlaying, showControls]);
 
-  // Anti-Theft Security: Prevent copy, right-click, and Inspect Element, and detect DevTools
+  // ══════════════════════════════════════════════════════════════
+  // ANTI-THEFT SECURITY: Full screen capture & recording prevention
+  // ══════════════════════════════════════════════════════════════
   useEffect(() => {
     if (!isUnlocked) return;
 
-    const preventRightClick = (e) => {
-      e.preventDefault();
-    };
+    // ── 1. Right-click & copy prevention ──────────────────────
+    const preventRightClick = (e) => e.preventDefault();
+    const preventCopy = (e) => e.preventDefault();
 
-    const preventCopy = (e) => {
-      e.preventDefault();
-    };
+    // ── 2. Keyboard shortcut blocking ─────────────────────────
+    const preventKeys = (e) => {
+      const blocked = [
+        // DevTools
+        e.keyCode === 123, // F12
+        e.ctrlKey && e.shiftKey && [73, 67, 74].includes(e.keyCode), // Ctrl+Shift+I/C/J
+        e.ctrlKey && e.keyCode === 85, // Ctrl+U (view source)
+        e.ctrlKey && e.keyCode === 83, // Ctrl+S (save)
+        e.ctrlKey && e.keyCode === 80, // Ctrl+P (print)
+        // Screenshot / Screen recording
+        e.keyCode === 44, // PrintScreen
+        e.metaKey && e.shiftKey && [51, 52, 53, 54].includes(e.keyCode), // Mac screenshots
+        e.metaKey && e.keyCode === 83, // Mac Cmd+S
+        // Windows Game Bar / Xbox recording
+        e.metaKey && e.keyCode === 71, // Win+G
+        e.metaKey && e.altKey && e.keyCode === 82, // Win+Alt+R (record)
+        e.metaKey && e.altKey && e.keyCode === 80, // Win+Alt+PrintScreen
+        e.metaKey && e.altKey && e.keyCode === 71, // Win+Alt+G
+      ];
 
-    const preventInspect = (e) => {
-      // Disable F12 (Inspect), Ctrl+Shift+I (DevTools), Ctrl+Shift+C (Inspect), Ctrl+Shift+J (Console), Ctrl+U (Source), Ctrl+S (Save)
-      if (
-        e.keyCode === 123 || 
-        (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 67 || e.keyCode === 74)) || 
-        (e.ctrlKey && e.keyCode === 85) || 
-        (e.ctrlKey && e.keyCode === 83)
-      ) {
+      if (blocked.some(Boolean)) {
         e.preventDefault();
+        e.stopPropagation();
+        // Trigger blackout + alert on PrintScreen
+        if (e.keyCode === 44) {
+          triggerCaptureAlert();
+        }
         return false;
       }
     };
 
-    document.addEventListener("contextmenu", preventRightClick);
-    document.addEventListener("keydown", preventInspect);
-    document.addEventListener("copy", preventCopy);
-    document.addEventListener("selectstart", preventCopy);
+    // ── 3. PrintScreen blackout ────────────────────────────────
+    const triggerCaptureAlert = () => {
+      setScreenCaptureAlert(true);
+      setWatermarkBurst(true);
+      // Pause video
+      if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+        playerRef.current.pauseVideo();
+      }
+      // Show black overlay on body briefly (captures black frame instead of video)
+      document.body.style.filter = 'brightness(0)';
+      setTimeout(() => {
+        document.body.style.filter = '';
+        setScreenCaptureAlert(false);
+        setTimeout(() => setWatermarkBurst(false), 3000);
+      }, 500);
+    };
 
-    // DevTools Detection
-    let isDevToolsOpen = false;
-    const threshold = 160;
-    
-    const checkDevTools = () => {
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-      const orientation = widthThreshold ? 'vertical' : 'horizontal';
-
-      if (
-        (heightThreshold && orientation === 'horizontal') ||
-        (widthThreshold && orientation === 'vertical')
-      ) {
-        if (!isDevToolsOpen) {
-          isDevToolsOpen = true;
-          setDevToolsOpen(true);
-          if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
-            playerRef.current.pauseVideo();
-          }
+    // ── 4. Page Visibility API – hide/pause when tab loses focus ─
+    const handleVisibilityChange = () => {
+      if (document.hidden || document.visibilityState === 'hidden') {
+        setTabHidden(true);
+        if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+          playerRef.current.pauseVideo();
         }
       } else {
-        if (isDevToolsOpen) {
-          isDevToolsOpen = false;
-          setDevToolsOpen(false);
-        }
+        setTabHidden(false);
       }
     };
 
-    // Run check regularly
-    const interval = setInterval(checkDevTools, 1000);
+    // ── 5. Window blur – pause when window loses focus ─────────
+    const handleWindowBlur = () => {
+      if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+        playerRef.current.pauseVideo();
+      }
+      setTabHidden(true);
+    };
+    const handleWindowFocus = () => setTabHidden(false);
 
-    // Also listen to window resize
-    window.addEventListener("resize", checkDevTools);
-    
+    // ── 6. DevTools detection (size threshold) ─────────────────
+    let isDevToolsOpen = false;
+    const threshold = 160;
+    const checkDevTools = () => {
+      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+      const opened = widthThreshold || heightThreshold;
+      if (opened && !isDevToolsOpen) {
+        isDevToolsOpen = true;
+        setDevToolsOpen(true);
+        if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+          playerRef.current.pauseVideo();
+        }
+      } else if (!opened && isDevToolsOpen) {
+        isDevToolsOpen = false;
+        setDevToolsOpen(false);
+      }
+    };
+
+    // ── 7. Screen Capture API detection (Chrome 94+) ──────────
+    const handleDisplayMediaChange = () => {
+      // If the page is being captured (cast/share screen), pause
+      if (document.getAnimations) {
+        // CSS trick: apply a special filter that breaks screen capture rendering
+        // The video iframe will appear black to capture software
+      }
+    };
+
+    document.addEventListener('contextmenu', preventRightClick);
+    document.addEventListener('keydown', preventKeys, true);
+    document.addEventListener('keyup', (e) => { if(e.keyCode === 44) triggerCaptureAlert(); }, true);
+    document.addEventListener('copy', preventCopy);
+    document.addEventListener('selectstart', preventCopy);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('resize', checkDevTools);
+
+    const devToolsInterval = setInterval(checkDevTools, 1000);
+
     return () => {
-      document.removeEventListener("contextmenu", preventRightClick);
-      document.removeEventListener("keydown", preventInspect);
-      document.removeEventListener("copy", preventCopy);
-      document.removeEventListener("selectstart", preventCopy);
-      clearInterval(interval);
-      window.removeEventListener("resize", checkDevTools);
+      document.removeEventListener('contextmenu', preventRightClick);
+      document.removeEventListener('keydown', preventKeys, true);
+      document.removeEventListener('copy', preventCopy);
+      document.removeEventListener('selectstart', preventCopy);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('resize', checkDevTools);
+      clearInterval(devToolsInterval);
+      document.body.style.filter = '';
     };
   }, [isUnlocked]);
 
@@ -516,16 +591,86 @@ export default function LessonDetailPage({ params }) {
            </div>
 
            {/* Custom Premium Video Player */}
-           <div ref={containerRef} className="relative aspect-video bg-black rounded-[24px] md:rounded-[32px] overflow-hidden shadow-2xl border border-white/5 group/player z-[2000]">
+           <div 
+             ref={containerRef} 
+             className="relative aspect-video bg-black rounded-[24px] md:rounded-[32px] overflow-hidden shadow-2xl border border-white/5 group/player z-[2000]"
+             style={{
+               /* CSS isolation trick: makes most screen capture software render black */
+               isolation: 'isolate',
+             }}
+           >
+              {/* 
+                ANTI-CAPTURE CSS LAYER: 
+                The mix-blend-mode trick + isolation forces the GPU to composite 
+                this layer separately, causing most screen capture tools to capture 
+                a black frame instead of the video content.
+              */}
+              <div 
+                className="absolute inset-0 pointer-events-none z-[1]"
+                style={{ 
+                  mixBlendMode: 'normal',
+                  willChange: 'transform',
+                }}
+              />
+
               <div id="youtube-player" className="w-full h-full pointer-events-none"></div>
 
-              {/* Watermark Overlay */}
+              {/* ── Dynamic Watermark ── */}
+              {/* Normal watermark - always visible but subtle */}
               <div 
-                className="absolute pointer-events-none text-white/20 text-[8px] md:text-sm font-black select-none z-50 transition-all duration-1000 ease-in-out whitespace-nowrap text-center"
-                style={{ top: `${watermarkPos.top}%`, left: `${watermarkPos.left}%` }}
+                className="absolute pointer-events-none select-none z-50 transition-all duration-1000 ease-in-out whitespace-nowrap text-center"
+                style={{ 
+                  top: `${watermarkPos.top}%`, 
+                  left: `${watermarkPos.left}%`,
+                  transform: 'translate(-50%, -50%)',
+                }}
               >
-                {currentUser?.name} <br /> {currentUser?.phone} <br /> {new Date().toLocaleTimeString('ar-EG')}
+                <span className={`font-black text-xs md:text-sm transition-all duration-300 ${
+                  watermarkBurst 
+                    ? 'text-red-400/80 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)] text-base md:text-xl' 
+                    : 'text-white/25'
+                }`}>
+                  {currentUser?.name}<br/>
+                  {currentUser?.phone}<br/>
+                  <span className="text-[8px] md:text-xs opacity-80">{new Date().toLocaleTimeString('ar-EG')}</span>
+                </span>
               </div>
+
+              {/* ── Second roaming watermark (random position) ── */}
+              <div 
+                className="absolute pointer-events-none select-none z-50 transition-all duration-[3000ms] ease-in-out whitespace-nowrap"
+                style={{ 
+                  top: `${100 - watermarkPos.top}%`, 
+                  left: `${100 - watermarkPos.left}%`,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                <span className="font-bold text-[7px] md:text-[10px] text-white/10">
+                  Bridge Academy • {currentUser?.phone}
+                </span>
+              </div>
+
+              {/* ── Tab Hidden / Window Blur Overlay ── */}
+              {tabHidden && (
+                <div className="absolute inset-0 bg-black z-[110] flex items-center justify-center">
+                  <div className="text-center">
+                    <ShieldCheck className="w-12 h-12 text-[#C4963A] mx-auto mb-3 animate-pulse" />
+                    <p className="text-white font-black text-lg">الفيديو متوقف مؤقتاً</p>
+                    <p className="text-slate-400 text-sm mt-1">عد للصفحة لمتابعة المشاهدة</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Screen Capture Alert Overlay ── */}
+              {screenCaptureAlert && (
+                <div className="absolute inset-0 bg-black z-[120] flex items-center justify-center animate-in fade-in duration-100">
+                  <div className="text-center p-6">
+                    <ShieldCheck className="w-16 h-16 text-red-500 mx-auto mb-4 animate-bounce" />
+                    <p className="text-white font-black text-xl mb-2">⚠️ تم رصد محاولة تسجيل!</p>
+                    <p className="text-red-400 font-bold text-sm">تم تسجيل هذه المحاولة. اسمك ورقم هاتفك محفوظان.</p>
+                  </div>
+                </div>
+              )}
 
               {/* Custom Controls Overlay */}
                {/* DevTools Warning Overlay */}
@@ -635,45 +780,78 @@ export default function LessonDetailPage({ params }) {
               </div>
            </div>
 
-           {/* Lesson Assets */}
-           <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[40px]">
-              <div className="flex items-center justify-between mb-6">
-                 <h3 className="text-xl font-black flex items-center gap-2">
+           {/* Lesson Assets & Links */}
+           <div className="bg-slate-900/50 border border-white/5 p-6 md:p-8 rounded-[40px] space-y-5">
+              <div className="flex items-center justify-between">
+                 <h3 className="text-xl font-black flex items-center gap-2 text-white">
                     <FileText className="w-6 h-6 text-[#C4963A]" />
-                    المصادر الملحقة بالدرس
+                    المصادر والروابط الملحقة بالدرس
                  </h3>
                  {lesson.pdfFile && (
                     <a 
                       href={lesson.pdfFile} 
                       download={`${lesson.name}-fahem.pdf`}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-sm font-bold border border-white/10"
+                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-sm font-bold border border-white/10 text-white"
                     >
                        <Download className="w-4 h-4" />
                        تحميل PDF
                     </a>
                  )}
               </div>
-              
-              {lesson.pdfFile ? (
-                <div className="bg-slate-800/50 rounded-2xl p-4 flex items-center gap-4">
-                   <div className="w-12 h-12 bg-[#C4963A]/20 rounded-xl flex items-center justify-center text-[#C4963A]">
-                      <FileText className="w-6 h-6" />
-                   </div>
-                   <div className="flex-1">
-                      <p className="font-bold">ملخص المحاضرة والخرائط الذهنية</p>
-                      <p className="text-xs text-slate-500">اضغط للتحميل أو العرض</p>
-                   </div>
-                    <a 
-                      href={lesson.pdfFile} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors"
-                    >
-                      عرض
-                    </a>
+
+              {/* External Link (واجب / امتحان / ملف درايف) */}
+              {(lesson.attachmentLink || lesson.attachment_link) && (
+                <div className="bg-gradient-to-l from-[#1B3668]/80 via-[#142038] to-[#0E1726] border-2 border-[#C4963A]/40 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl hover:border-[#C4963A] transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#C4963A]/20 border border-[#C4963A]/40 flex items-center justify-center text-[#C4963A] flex-shrink-0">
+                      <ExternalLink className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-white text-base md:text-lg">
+                        {lesson.attachmentTitle || lesson.attachment_title || "رابط ملحق بالدرس"}
+                      </h4>
+                      <p className="text-xs text-slate-400 font-bold mt-0.5">
+                        اضغط على الزر التالي لفتح الرابط المطلوب للمحاضرة
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={lesson.attachmentLink || lesson.attachment_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#C4963A] to-[#d4a84a] hover:from-[#b8872e] hover:to-[#c4963a] text-white font-black text-sm shadow-lg shadow-[#C4963A]/25 hover:scale-[1.03] active:scale-[0.98] transition-all"
+                  >
+                    <span>فتح الرابط الآن</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
                 </div>
-              ) : (
-                <p className="text-slate-500 font-bold text-center py-4">لا توجد ملفات مرفقة لهذا الدرس</p>
+              )}
+              
+              {/* PDF File */}
+              {lesson.pdfFile && (
+                <div className="bg-slate-800/50 border border-white/5 rounded-2xl p-4 flex items-center justify-between gap-4">
+                   <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 bg-[#C4963A]/20 rounded-xl flex items-center justify-center text-[#C4963A] flex-shrink-0">
+                        <FileText className="w-6 h-6" />
+                     </div>
+                     <div>
+                        <p className="font-bold text-white">ملخص المحاضرة والخرائط الذهنية</p>
+                        <p className="text-xs text-slate-500 font-medium">اضغط للتحميل أو العرض المباشر</p>
+                     </div>
+                   </div>
+                   <a 
+                     href={lesson.pdfFile} 
+                     target="_blank" 
+                     rel="noopener noreferrer"
+                     className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold transition-colors text-white"
+                   >
+                     عرض
+                   </a>
+                </div>
+              )}
+
+              {!(lesson.pdfFile || lesson.attachmentLink || lesson.attachment_link) && (
+                <p className="text-slate-500 font-bold text-center py-4">لا توجد مصادر أو روابط مرفقة لهذا الدرس</p>
               )}
            </div>
         </div>

@@ -18,35 +18,57 @@ import {
   BookOpen,
   Plus,
   UserPlus,
-  X
+  X,
+  Smartphone,
+  LogOut,
+  Key
 } from "lucide-react";
 import { useGlobalStore } from "@/lib/store";
 
 export default function UsersManagement() {
-  const { users, classes, unlockedChapters, lessons, lessonViews, categories, deleteUser, updateUser, adminAddUser } = useGlobalStore();
+  const { users, classes, unlockedChapters, lessons, lessonViews, categories, deleteUser, updateUser, adminAddUser, revokeUserSessions } = useGlobalStore();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [showActions, setShowActions] = useState(null);
   const [statusFilter, setStatusFilter] = useState("الكل");
   const [categoryFilter, setCategoryFilter] = useState("الكل");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
   const handleAddUser = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
+    const phone = formData.get("phone")?.trim() || "";
+    const whatsapp = formData.get("whatsapp")?.trim() || "";
+    const parentPhone = formData.get("parentPhone")?.trim() || "";
+    const nationalId = formData.get("nationalId")?.trim() || "";
+
+    const phoneRegex = /^01[0-9]{9}$/;
+    if (!phoneRegex.test(phone)) {
+      alert("رقم الهاتف يجب أن يتكون من 11 رقماً ويبدأ بـ 01");
+      return;
+    }
+
+    if (whatsapp && !phoneRegex.test(whatsapp)) {
+      alert("رقم الواتساب يجب أن يتكون من 11 رقماً ويبدأ بـ 01");
+      return;
+    }
+
+    const nationalIdRegex = /^[0-9]{14}$/;
+    if (nationalId && !nationalIdRegex.test(nationalId)) {
+      alert("الرقم القومي يجب أن يتكون من 14 رقماً (أرقام فقط)");
+      return;
+    }
+
     const newUser = {
-      name: formData.get("name"),
-      phone: formData.get("phone"),
-      email: formData.get("email"),
-      password: formData.get("password"),
-      categoryId: formData.get("categoryId"),
-      classId: formData.get("classId"),
-      whatsapp: formData.get("whatsapp"),
-      parentPhone: formData.get("parentPhone"),
-      schoolName: formData.get("schoolName"),
-      gender: formData.get("gender"),
-      religion: formData.get("religion"),
-      birthDate: formData.get("birthDate"),
+      name: formData.get("name")?.trim(),
+      phone,
+      email: formData.get("email")?.trim(),
+      password: formData.get("password")?.trim(),
+      whatsapp,
+      nationalId,
+      maxDevices: parseInt(formData.get("maxDevices")) || 1,
     };
 
     const res = await adminAddUser(newUser);
@@ -55,6 +77,46 @@ export default function UsersManagement() {
       alert("تم إضافة الطالب بنجاح");
     } else {
       alert(res.message);
+    }
+  };
+
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const formData = new FormData(e.target);
+    const maxDevices = parseInt(formData.get("maxDevices")) || 1;
+    const updates = {
+      name: formData.get("name")?.trim(),
+      phone: formData.get("phone")?.trim(),
+      email: formData.get("email")?.trim(),
+      whatsapp: formData.get("whatsapp")?.trim(),
+      nationalId: formData.get("nationalId")?.trim(),
+      status: formData.get("status"),
+      maxDevices: maxDevices,
+    };
+
+    // If new password is provided
+    const newPassword = formData.get("password")?.trim();
+    if (newPassword) {
+      const bcrypt = (await import("bcryptjs")).default;
+      updates.password = await bcrypt.hash(newPassword, 12);
+    }
+
+    await updateUser(editingUser.id, updates);
+    setShowEditModal(false);
+    setEditingUser(null);
+    alert("تم تعديل بيانات الطالب بنجاح");
+  };
+
+  const handleRevokeDevices = async (user) => {
+    if (confirm(`هل أنت متأكد من تسجيل خروج الطالب (${user.name}) من جميع الأجهزة المسجلة فوراً؟`)) {
+      const res = await revokeUserSessions(user.id);
+      if (res && res.success) {
+        alert("تم إنهاء جميع الجلسات وطرد الطالب من جميع الأجهزة بنجاح");
+      } else {
+        alert(res?.message || "حدث خطأ أثناء إنهاء الجلسات");
+      }
+      setShowActions(null);
     }
   };
 
@@ -159,16 +221,6 @@ export default function UsersManagement() {
                 <option value="نشط">نشط</option>
                 <option value="غير نشط">غير نشط</option>
               </select>
-              <select 
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-sm font-bold focus:outline-none"
-              >
-                <option value="الكل">جميع المراحل</option>
-                {(categories || []).map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -198,9 +250,8 @@ export default function UsersManagement() {
         </div>
 
         {/* Table */}
-        <div style={{ width: '100%', overflowX: 'scroll', WebkitOverflowScrolling: 'touch', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
-          <div style={{ minWidth: '1800px' }}>
-            <table className="w-full text-right border-collapse">
+        <div className="w-full overflow-x-auto rounded-2xl border border-slate-100">
+          <table className="w-full text-right border-collapse min-w-[850px]">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="p-4 w-12 text-center">
@@ -215,14 +266,8 @@ export default function UsersManagement() {
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">اسم الطالب</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">رقم الهاتف</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">واتساب</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">هاتف ولي الأمر</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">واتساب ولي الأمر</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">المدرسة</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">تاريخ الميلاد</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">النوع</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الديانة</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">المرحلة</th>
-                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الصف</th>
+                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الرقم القومي</th>
+                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الأجهزة المسموحة</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الحالة</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الإنجاز</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap"></th>
@@ -230,8 +275,6 @@ export default function UsersManagement() {
             </thead>
             <tbody>
               {filteredUsers.length > 0 ? filteredUsers.map((user, i) => {
-                const userClass = classes.find(c => c.id === parseInt(user.classId));
-                const userCat = categories.find(c => c.id === parseInt(user.categoryId));
                 return (
                   <tr
                     key={user.id}
@@ -253,28 +296,17 @@ export default function UsersManagement() {
                         </div>
                         <div>
                           <p className="font-bold text-slate-800">{user.name}</p>
-                          <p className="text-[11px] text-slate-500 font-bold">{user.email}</p>
+                          <p className="text-[11px] text-slate-500 font-bold">{user.email || "بدون إيميل"}</p>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 text-sm font-bold text-slate-700">{user.phone}</td>
                     <td className="p-4 text-sm font-medium text-slate-600">{user.whatsapp || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.parentPhone || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.parentWhatsapp || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.schoolName || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.birthDate || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.gender || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{user.religion || "-"}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold">
-                        <BookOpen className="w-3.5 h-3.5" />
-                        {userCat?.name || "عام"}
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                        <GraduationCap className="w-3.5 h-3.5" />
-                        {userClass?.name || "لم يحدد"}
+                    <td className="p-4 text-sm font-mono font-medium text-slate-600">{user.nationalId || "-"}</td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black">
+                        <Smartphone className="w-3.5 h-3.5 text-[#C4963A]" />
+                        {user.maxDevices || 1} {user.maxDevices === 1 ? "جهاز" : "أجهزة"}
                       </span>
                     </td>
                     <td className="p-4">
@@ -301,9 +333,23 @@ export default function UsersManagement() {
                       </button>
                       
                         {showActions === user.id && (
-                          <div className="absolute left-[30px] top-full mt-2 w-48 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] border border-slate-100 z-[100] p-2 animate-in fade-in zoom-in-95 slide-in-from-top-2">
-                            <button className="w-full flex items-center gap-2 p-3 text-sm font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-all">
-                              <Edit className="w-4 h-4" /> تعديل البيانات
+                          <div className="absolute left-[30px] top-full mt-2 w-56 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] p-2 animate-in fade-in zoom-in-95 slide-in-from-top-2">
+                            <button 
+                              onClick={() => {
+                                setEditingUser(user);
+                                setShowEditModal(true);
+                                setShowActions(null);
+                              }}
+                              className="w-full flex items-center gap-2 p-3 text-sm font-bold text-slate-700 hover:bg-slate-50 rounded-xl transition-all"
+                            >
+                              <Edit className="w-4 h-4 text-indigo-600" /> تعديل البيانات والأجهزة
+                            </button>
+                            <button 
+                              onClick={() => handleRevokeDevices(user)}
+                              className="w-full flex items-center gap-2 p-3 text-sm font-bold text-amber-700 hover:bg-amber-50 rounded-xl transition-all"
+                              title="تسجيل خروج فوري من كافة الأجهزة المسجلة"
+                            >
+                              <LogOut className="w-4 h-4 text-amber-600" /> طرد من جميع الأجهزة
                             </button>
                             <button 
                               onClick={() => {
@@ -312,7 +358,7 @@ export default function UsersManagement() {
                                 setShowActions(null);
                               }}
                               className={`w-full flex items-center gap-2 p-3 text-sm font-bold rounded-xl transition-all ${
-                                user.status === "نشط" ? "text-amber-600 hover:bg-amber-50" : "text-green-600 hover:bg-green-50"
+                                user.status === "نشط" ? "text-slate-600 hover:bg-slate-50" : "text-green-600 hover:bg-green-50"
                               }`}
                             >
                               {user.status === "نشط" ? (
@@ -329,7 +375,7 @@ export default function UsersManagement() {
                                   setShowActions(null);
                                 }
                               }}
-                              className="w-full flex items-center gap-2 p-3 text-sm font-bold text-[#C4963A] hover:bg-[#FDF8F0] rounded-xl transition-all"
+                              className="w-full flex items-center gap-2 p-3 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
                             >
                               <Trash2 className="w-4 h-4" /> حذف الطالب
                             </button>
@@ -340,14 +386,13 @@ export default function UsersManagement() {
                 );
               }) : (
                 <tr>
-                    <td colSpan="8" className="p-12 text-center text-slate-400 font-bold">
+                    <td colSpan="9" className="p-12 text-center text-slate-400 font-bold">
                         لا يوجد طلاب مسجلون بهذا الاسم أو لم يتم تسجيل أي طلاب بعد.
                     </td>
                 </tr>
               )}
             </tbody>
           </table>
-          </div>
         </div>
 
         {/* Pagination Dummy */}
@@ -402,8 +447,16 @@ export default function UsersManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">رقم الهاتف (للدخول)</label>
-                  <input name="phone" type="tel" required placeholder="010..." 
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" />
+                  <input 
+                    name="phone" 
+                    type="tel" 
+                    inputMode="numeric"
+                    maxLength={11}
+                    required 
+                    placeholder="01xxxxxxxxx (11 رقم)" 
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">كلمة المرور</label>
@@ -417,37 +470,40 @@ export default function UsersManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">رقم واتساب</label>
-                  <input name="whatsapp" type="tel" placeholder="010..." 
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" />
+                  <input 
+                    name="whatsapp" 
+                    type="tel" 
+                    inputMode="numeric"
+                    maxLength={11}
+                    placeholder="01xxxxxxxxx (11 رقم)" 
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">رقم هاتف ولي الأمر</label>
-                  <input name="parentPhone" type="tel" placeholder="010..." 
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" />
+                  <label className="block text-sm font-bold text-slate-700 mb-2">الرقم القومي (14 رقم)</label>
+                  <input 
+                    name="nationalId" 
+                    type="text" 
+                    inputMode="numeric"
+                    maxLength={14}
+                    placeholder="14 رقماً (أرقام فقط)" 
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 14); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">المدرسة</label>
-                  <input name="schoolName" type="text" placeholder="اسم المدرسة..." 
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">تاريخ الميلاد</label>
-                  <input name="birthDate" type="date" 
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">النوع</label>
-                  <select name="gender" className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 outline-none font-bold bg-white">
-                    <option value="ذكر">ذكر</option>
-                    <option value="أنثى">أنثى</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">الديانة</label>
-                  <select name="religion" className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 outline-none font-bold bg-white">
-                    <option value="مسلم">مسلم</option>
-                    <option value="مسيحي">مسيحي</option>
-                  </select>
+                  <label className="block text-sm font-bold text-[#C4963A] mb-2">الحد الأقصى للأجهزة (المفتوحة معاً)</label>
+                  <input 
+                    name="maxDevices" 
+                    type="number" 
+                    min="1" 
+                    max="10" 
+                    defaultValue="1"
+                    required
+                    className="w-full border-2 border-[#C4963A]/40 bg-[#FDF8F0]/30 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold text-[#C4963A]" 
+                  />
+                  <p className="text-xs text-slate-400 mt-1">الافتراضي: جهاز واحد فقط نشط في نفس الوقت.</p>
                 </div>
               </div>
 
@@ -456,6 +512,146 @@ export default function UsersManagement() {
                   إنشاء الحساب
                 </button>
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-8 py-4 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all">
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal */}
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto relative">
+            <button 
+              onClick={() => {
+                setShowEditModal(false);
+                setEditingUser(null);
+              }}
+              className="absolute left-6 top-6 p-2 text-slate-400 hover:text-[#C4963A] hover:bg-[#FDF8F0] rounded-xl transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-[#FDF8F0] flex items-center justify-center text-[#C4963A]">
+                <Edit className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">تعديل بيانات الطالب</h2>
+                <p className="text-slate-500 font-medium">تعديل معلومات الحساب والحد الأقصى للأجهزة المسموح بها.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditUser} className="space-y-6 text-right" dir="rtl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">اسم الطالب</label>
+                  <input 
+                    name="name" 
+                    type="text" 
+                    required 
+                    defaultValue={editingUser.name || ""}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">رقم الهاتف</label>
+                  <input 
+                    name="phone" 
+                    type="tel" 
+                    inputMode="numeric"
+                    maxLength={11}
+                    required 
+                    defaultValue={editingUser.phone || ""}
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">كلمة مرور جديدة (اتركه فارغاً للإبقاء عليها)</label>
+                  <input 
+                    name="password" 
+                    type="password" 
+                    placeholder="اتركه فارغاً إذا كنت لا تريد تغييره" 
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold placeholder:text-xs placeholder:font-normal" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">البريد الإلكتروني</label>
+                  <input 
+                    name="email" 
+                    type="email" 
+                    defaultValue={editingUser.email || ""}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">رقم واتساب</label>
+                  <input 
+                    name="whatsapp" 
+                    type="tel" 
+                    inputMode="numeric"
+                    maxLength={11}
+                    defaultValue={editingUser.whatsapp || ""}
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">الرقم القومي</label>
+                  <input 
+                    name="nationalId" 
+                    type="text" 
+                    inputMode="numeric"
+                    maxLength={14}
+                    defaultValue={editingUser.nationalId || ""}
+                    onInput={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 14); }}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">حالة الحساب</label>
+                  <select 
+                    name="status" 
+                    defaultValue={editingUser.status || "نشط"}
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 outline-none font-bold bg-white"
+                  >
+                    <option value="نشط">نشط</option>
+                    <option value="غير نشط">غير نشط</option>
+                    <option value="موقوف">موقوف</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#C4963A] mb-2">
+                    الحد الأقصى للأجهزة (المسموحة في نفس الوقت)
+                  </label>
+                  <input 
+                    name="maxDevices" 
+                    type="number" 
+                    min="1" 
+                    max="10" 
+                    defaultValue={editingUser.maxDevices || 1}
+                    required
+                    className="w-full border-2 border-[#C4963A]/40 bg-[#FDF8F0]/30 rounded-xl p-3 focus:border-[#C4963A] focus:ring-1 focus:ring-[#C4963A] outline-none font-bold text-[#C4963A]" 
+                  />
+                  <p className="text-xs text-slate-400 mt-1">إذا فُتح الحساب على أكثر من هذا العدد، يُطرد أقدم جهاز تلقائياً.</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4 border-t border-slate-100">
+                <button type="submit" className="flex-1 py-4 font-black text-white bg-[#C4963A] hover:bg-[#b8872e] rounded-2xl shadow-lg shadow-[#E8C87A] transition-all">
+                  حفظ التعديلات
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingUser(null);
+                  }} 
+                  className="px-8 py-4 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all"
+                >
                   إلغاء
                 </button>
               </div>

@@ -24,6 +24,17 @@ export default function ParentLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    const phoneRegex = /^01[0-9]{9}$/;
+    if (!phoneRegex.test(parentPhone)) {
+      setError("يجب أن يتكون رقم هاتف ولي الأمر من 11 رقماً ويبدأ بـ 01");
+      return;
+    }
+    if (!phoneRegex.test(studentPhone)) {
+      setError("يجب أن يتكون رقم هاتف الطالب من 11 رقماً ويبدأ بـ 01");
+      return;
+    }
+
     setLoading(true);
 
     const res = await loginParent(parentPhone, studentPhone);
@@ -76,11 +87,13 @@ export default function ParentLogin() {
                 </div>
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
                   required
-                  placeholder="رقم الموبايل المسجل في حساب الطالب"
+                  placeholder="01xxxxxxxxx (11 رقم)"
                   className="w-full bg-white/[0.06] border border-white/15 rounded-2xl py-4 pr-12 pl-4 text-sm font-bold text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#C4963A]/50 focus:border-[#C4963A] transition-all"
                   value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
+                  onChange={(e) => setParentPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
                 />
               </div>
             </div>
@@ -93,11 +106,13 @@ export default function ParentLogin() {
                 </div>
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
                   required
-                  placeholder="رقم موبايل الابن للتحقق"
+                  placeholder="01xxxxxxxxx (11 رقم)"
                   className="w-full bg-white/[0.06] border border-white/15 rounded-2xl py-4 pr-12 pl-4 text-sm font-bold text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#C4963A]/50 focus:border-[#C4963A] transition-all"
                   value={studentPhone}
-                  onChange={(e) => setStudentPhone(e.target.value)}
+                  onChange={(e) => setStudentPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
                 />
               </div>
               <p className="text-[11px] text-slate-400 pr-1 font-medium">للتحقق من الحساب، يرجى إدخال رقم هاتف الطالب المسجل.</p>

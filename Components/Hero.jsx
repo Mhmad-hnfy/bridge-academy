@@ -52,8 +52,10 @@ function useCounter(target, duration = 2000) {
 }
 
 export default function Hero() {
-  const { currentUser } = useGlobalStore();
-  const [students, studentsRef] = useCounter(5000);
+  const { currentUser, users } = useGlobalStore();
+  const studentCount = (users || []).filter((u) => u.role !== "admin").length;
+  const targetStudents = 50 + studentCount;
+  const [students, studentsRef] = useCounter(targetStudents, 1500);
   const [courses, coursesRef] = useCounter(120);
   const [visible, setVisible] = useState(false);
 
