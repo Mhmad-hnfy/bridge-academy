@@ -31,8 +31,13 @@ import {
   Send,
   X,
   GripVertical,
+  Shield,
+  FileQuestion,
+  Video,
 } from "lucide-react";
 import ImageUpload from "@/Components/ImageUpload";
+import PdfOrDriveUpload from "@/Components/PdfOrDriveUpload";
+import { cleanVideoInput } from "@/lib/videoHelper";
 
 export default function LessonsManagement() {
   const { 
@@ -45,13 +50,21 @@ export default function LessonsManagement() {
     updateLesson, 
     deleteLesson,
     reorderLessons,
+    examBanks,
+    lessonQuizzes,
+    addLessonQuiz,
+    updateLessonQuiz,
+    deleteLessonQuiz,
   } = useGlobalStore();
 
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
-  const [whatsappPrompt, setWhatsappPrompt] = useState(null); // { lessonName, classId }
+  const [whatsappPrompt, setWhatsappPrompt] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Quiz linking state
+  const [quizModal, setQuizModal] = useState(null); // lesson object
+  const [quizForm, setQuizForm] = useState({ examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4 });
 
   // Drag-and-drop state for lesson reordering
   const dragLessonId = useRef(null);
@@ -88,7 +101,13 @@ export default function LessonsManagement() {
 
   // Dynamic filter lists for top filter bar
   const filterCoursesList = useMemo(() => {
-    return courses.filter(c => !filterCategory || c.categoryId === parseInt(filterCategory) || classes.find(cl => cl.id === c.classId)?.categoryId === parseInt(filterCategory));
+    return courses.filter(c => {
+      if (!filterCategory) return true;
+      const catId = parseInt(filterCategory);
+      if (c.categoryId === catId) return true;
+      if (Array.isArray(c.categoryIds) && c.categoryIds.map(Number).includes(catId)) return true;
+      return classes.find(cl => cl.id === c.classId)?.categoryId === catId;
+    });
   }, [courses, filterCategory, classes]);
 
   const filterChaptersList = useMemo(() => {
@@ -97,7 +116,13 @@ export default function LessonsManagement() {
 
   // Modal Dynamic lists
   const modalCoursesList = useMemo(() => {
-    return courses.filter(c => !formData.categoryId || c.categoryId === parseInt(formData.categoryId) || classes.find(cl => cl.id === c.classId)?.categoryId === parseInt(formData.categoryId));
+    return courses.filter(c => {
+      if (!formData.categoryId) return true;
+      const catId = parseInt(formData.categoryId);
+      if (c.categoryId === catId) return true;
+      if (Array.isArray(c.categoryIds) && c.categoryIds.map(Number).includes(catId)) return true;
+      return classes.find(cl => cl.id === c.classId)?.categoryId === catId;
+    });
   }, [courses, formData.categoryId, classes]);
 
   const modalChaptersList = useMemo(() => {
@@ -257,8 +282,11 @@ export default function LessonsManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    const cleanUrl = cleanVideoInput(formData.youtubeLink);
     const submissionData = {
         ...formData,
+        youtubeLink: cleanUrl,
+        videoUrl: cleanUrl,
         categoryId: parseInt(formData.categoryId),
         chapterId: parseInt(formData.chapterId)
     };
@@ -303,7 +331,7 @@ export default function LessonsManagement() {
       categoryId: catId ? catId.toString() : "",
       courseId: course?.id?.toString() || "",
       chapterId: lesson.chapterId?.toString() || "",
-      youtubeLink: lesson.youtubeLink || "",
+      youtubeLink: lesson.youtubeLink || lesson.videoUrl || "",
       banner: lesson.banner || "",
       pdfFile: lesson.pdfFile || "",
       attachmentLink: lesson.attachmentLink || lesson.attachment_link || "",
@@ -621,17 +649,23 @@ export default function LessonsManagement() {
                                                     </div>
                                                   </td>
                                                   
-                                                  {/* Youtube Link */}
+                                                  {/* Video Link */}
                                                   <td className="py-3.5 px-4 text-sm font-bold text-slate-600">
-                                                    {lesson.youtubeLink ? (
+                                                    {(lesson.youtubeLink || lesson.videoUrl) ? (
                                                       <a
-                                                        href={lesson.youtubeLink}
+                                                        href={lesson.youtubeLink || lesson.videoUrl}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="inline-flex items-center gap-1.5 text-[#C4963A] hover:text-[#b8872e] bg-[#FDF8F0] hover:bg-[#FBF0DC] px-3 py-1.5 rounded-lg text-xs transition-colors"
                                                       >
-                                                        <Youtube className="w-4 h-4" />
-                                                        مشاهدة الفيديو
+                                                        {(lesson.youtubeLink || lesson.videoUrl).includes('mediadelivery.net') || (lesson.youtubeLink || lesson.videoUrl).includes('bunny') ? (
+                                                          <Video className="w-4 h-4 text-emerald-600" />
+                                                        ) : (
+                                                          <Youtube className="w-4 h-4 text-red-500" />
+                                                        )}
+                                                        <span>
+                                                          {(lesson.youtubeLink || lesson.videoUrl).includes('mediadelivery.net') || (lesson.youtubeLink || lesson.videoUrl).includes('bunny') ? 'فيديو Bunny' : 'فيديو YouTube'}
+                                                        </span>
                                                         <ExternalLink className="w-3 h-3" />
                                                       </a>
                                                     ) : (
@@ -695,9 +729,30 @@ export default function LessonsManagement() {
                                                       >
                                                         <Edit className="w-4 h-4" />
                                                       </button>
+                                                      {/* زر ربط الكويز */}
+                                                      <button 
+                                                        onClick={() => {
+                                                          const existing = (lessonQuizzes || []).find(q => q.lessonId === lesson.id);
+                                                          setQuizForm(existing ? {
+                                                            examBankId: existing.examBankId?.toString() || "",
+                                                            passPercentage: existing.passPercentage || 50,
+                                                            locksNextLessons: existing.locksNextLessons !== false,
+                                                            retryHours: existing.retryHours || 4,
+                                                          } : { examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4 });
+                                                          setQuizModal(lesson);
+                                                        }}
+                                                        className={`p-2 rounded-xl transition-all border ${ 
+                                                          (lessonQuizzes || []).find(q => q.lessonId === lesson.id)
+                                                            ? "text-[#C4963A] bg-[#FDF8F0] border-[#F0DDB8]"
+                                                            : "bg-slate-50 text-slate-600 border-slate-100 hover:text-[#C4963A] hover:bg-[#FDF8F0]"
+                                                        }`}
+                                                        title="ربط كويز بهذا الدرس"
+                                                      >
+                                                        <Shield className="w-4 h-4" />
+                                                      </button>
                                                       <button 
                                                         onClick={() => deleteLesson(lesson.id)}
-                                                        className="p-2 bg-slate-50 text-slate-600 rounded-xl hover:text-[#C4963A] hover:bg-[#FDF8F0] transition-all border border-slate-100"
+                                                        className="p-2 bg-slate-50 text-slate-600 rounded-xl hover:text-red-500 hover:bg-red-50 transition-all border border-slate-100"
                                                         title="حذف الدرس"
                                                       >
                                                         <Trash2 className="w-4 h-4" />
@@ -774,15 +829,24 @@ export default function LessonsManagement() {
                             </td>
 
                             <td className="py-3.5 px-4">
-                              {lesson.youtubeLink ? (
+                              {(lesson.youtubeLink || lesson.videoUrl) ? (
                                 <a
-                                  href={lesson.youtubeLink}
+                                  href={lesson.youtubeLink || lesson.videoUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-xs text-[#C4963A] font-bold hover:underline"
                                 >
-                                  <Youtube className="w-4 h-4" />
-                                  يوتيوب
+                                  {(lesson.youtubeLink || lesson.videoUrl).includes('mediadelivery.net') || (lesson.youtubeLink || lesson.videoUrl).includes('bunny') ? (
+                                    <>
+                                      <Video className="w-4 h-4 text-emerald-600" />
+                                      Bunny.net
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Youtube className="w-4 h-4 text-red-500" />
+                                      يوتيوب
+                                    </>
+                                  )}
                                 </a>
                               ) : (
                                 <span className="text-slate-400 text-xs">لا يوجد</span>
@@ -1021,17 +1085,25 @@ export default function LessonsManagement() {
                   </div>
                 </div>
 
-                  {/* YouTube only - full width */}
+                  {/* Video URL (YouTube or Bunny Stream) */}
                   <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 block pr-2">رابط فيديو اليوتيوب</label>
+                      <div className="flex items-center justify-between">
+                          <label className="text-sm font-black text-slate-700 block pr-2">رابط الفيديو (YouTube أو Bunny Stream)</label>
+                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              يدعم YouTube & Bunny.net
+                          </span>
+                      </div>
                       <input
-                          type="url"
-                          placeholder="https://youtube.com/watch?v=..."
-                          className="w-full px-4 py-4 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-slate-700"
+                          type="text"
+                          placeholder="رابط YouTube أو رابط/كود Bunny (مثال: https://iframe.mediadelivery.net/embed/...)"
+                          className="w-full px-4 py-4 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-slate-700 text-left dir-ltr"
                           value={formData.youtubeLink}
                           onChange={(e) => setFormData({...formData, youtubeLink: e.target.value})}
                           required
                       />
+                      <p className="text-xs text-slate-400 font-medium pr-2">
+                          يمكنك وضع رابط YouTube، أو رابط الـ Embed من Bunny Stream، أو حتى كود iframe كاملاً وسنقوم بتهيئته تلقائياً.
+                      </p>
                   </div>
 
                 {/* Image and PDF Upload */}
@@ -1047,20 +1119,11 @@ export default function LessonsManagement() {
                     
                     {/* PDF Summary Document */}
                     <div className="space-y-2">
-                        <label className="text-sm font-black text-slate-700 block pr-2">ملخص أو ملزمة الدرس (ملف PDF)</label>
-                        <div className="relative group/pdf h-[200px] border-2 border-dashed border-slate-200 rounded-[32px] flex flex-col items-center justify-center bg-slate-50 hover:bg-white hover:border-blue-400 transition-all cursor-pointer">
-                            <input 
-                                type="file" 
-                                className="absolute inset-0 opacity-0 cursor-pointer" 
-                                accept="application/pdf"
-                                onChange={handlePdfUpload}
-                            />
-                            <FileText className="w-12 h-12 text-slate-300 mb-2 group-hover/pdf:text-blue-500 transition-colors" />
-                            <span className="text-sm font-black text-slate-600 group-hover/pdf:text-blue-600 transition-colors">
-                                {formData.pdfFile ? "تم اختيار ملف PDF بنجاح" : "اضغط لرفع ملف PDF هنا"}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold mt-1">يقبل الملفات بصيغة PDF فقط</span>
-                        </div>
+                        <PdfOrDriveUpload
+                            value={formData.pdfFile}
+                            onChange={(val) => setFormData({ ...formData, pdfFile: val })}
+                            label="ملخص أو ملزمة الدرس (ملف PDF)"
+                        />
                     </div>
                 </div>
 
@@ -1121,6 +1184,132 @@ export default function LessonsManagement() {
                     </button>
                 </div>
              </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── مودال ربط الكويز بالدرس ── */}
+      {quizModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-md shadow-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-black text-slate-800">ربط كويز بالدرس</h2>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">{quizModal.name}</p>
+              </div>
+              <button onClick={() => setQuizModal(null)} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-5">
+              {/* اختيار الامتحان */}
+              <div>
+                <label className="block text-sm font-black text-slate-700 mb-2">
+                  <Shield className="w-4 h-4 inline ml-1 text-[#C4963A]" />
+                  اختر الامتحان من البنك
+                </label>
+                <select
+                  value={quizForm.examBankId}
+                  onChange={e => setQuizForm({ ...quizForm, examBankId: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] outline-none font-bold text-sm bg-white"
+                >
+                  <option value="">-- اختر امتحاناً --</option>
+                  {(examBanks || []).map(b => (
+                    <option key={b.id} value={b.id}>{b.name} ({b.subjectName})</option>
+                  ))}
+                </select>
+                {(examBanks || []).length === 0 && (
+                  <p className="text-xs text-orange-500 font-bold mt-1">
+                    ⚠️ لا توجد امتحانات. اذهب لـ &quot;بنك الامتحانات&quot; لإنشاء امتحان أولاً.
+                  </p>
+                )}
+              </div>
+
+              {/* نسبة النجاح */}
+              <div>
+                <label className="block text-sm font-black text-slate-700 mb-2">
+                  نسبة النجاح المطلوبة: <span className="text-[#C4963A]">{quizForm.passPercentage}%</span>
+                </label>
+                <input
+                  type="range"
+                  min={30} max={100} step={5}
+                  value={quizForm.passPercentage}
+                  onChange={e => setQuizForm({ ...quizForm, passPercentage: parseInt(e.target.value) })}
+                  className="w-full accent-[#C4963A]"
+                />
+                <div className="flex justify-between text-xs text-slate-400 font-bold mt-1">
+                  <span>30%</span><span>100%</span>
+                </div>
+              </div>
+
+              {/* ساعات الانتظار */}
+              <div>
+                <label className="block text-sm font-black text-slate-700 mb-2">
+                  ساعات الانتظار قبل الإعادة
+                </label>
+                <select
+                  value={quizForm.retryHours}
+                  onChange={e => setQuizForm({ ...quizForm, retryHours: parseInt(e.target.value) })}
+                  className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] outline-none font-bold text-sm bg-white"
+                >
+                  {[1, 2, 4, 6, 12, 24, 48].map(h => (
+                    <option key={h} value={h}>{h} ساعة{h === 1 ? "" : "ات"}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* إعداد القفل */}
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <input
+                  type="checkbox"
+                  id="locksNext"
+                  checked={quizForm.locksNextLessons}
+                  onChange={e => setQuizForm({ ...quizForm, locksNextLessons: e.target.checked })}
+                  className="w-5 h-5 accent-[#C4963A] rounded"
+                />
+                <label htmlFor="locksNext" className="text-sm font-black text-slate-700 cursor-pointer">
+                  يقفل الدروس التالية حتى اجتيازه
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={async () => {
+                    if (!quizForm.examBankId) { alert("اختر امتحاناً أولاً"); return; }
+                    const existing = (lessonQuizzes || []).find(q => q.lessonId === quizModal.id);
+                    const payload = {
+                      lessonId: quizModal.id,
+                      examBankId: parseInt(quizForm.examBankId),
+                      passPercentage: quizForm.passPercentage,
+                      locksNextLessons: quizForm.locksNextLessons,
+                      retryHours: quizForm.retryHours,
+                    };
+                    if (existing) await updateLessonQuiz(existing.id, payload);
+                    else await addLessonQuiz(payload);
+                    setQuizModal(null);
+                  }}
+                  className="flex-1 py-3 font-black text-white bg-[#C4963A] hover:bg-[#b8872e] rounded-xl shadow-lg transition-all"
+                >
+                  حفظ إعدادات الكويز
+                </button>
+                {(lessonQuizzes || []).find(q => q.lessonId === quizModal.id) && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("هل تريد إلغاء الكويز عن هذا الدرس؟")) return;
+                      const existing = (lessonQuizzes || []).find(q => q.lessonId === quizModal.id);
+                      await deleteLessonQuiz(existing.id);
+                      setQuizModal(null);
+                    }}
+                    className="px-4 py-3 font-black text-red-500 bg-red-50 hover:bg-red-100 rounded-xl transition-all"
+                  >
+                    إلغاء الكويز
+                  </button>
+                )}
+                <button onClick={() => setQuizModal(null)} className="px-4 py-3 font-black text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
+                  إغلاق
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

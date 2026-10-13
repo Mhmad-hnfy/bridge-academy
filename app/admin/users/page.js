@@ -26,7 +26,31 @@ import {
 import { useGlobalStore } from "@/lib/store";
 
 export default function UsersManagement() {
-  const { users, classes, unlockedChapters, lessons, lessonViews, categories, deleteUser, updateUser, adminAddUser, revokeUserSessions } = useGlobalStore();
+  const {
+    users,
+    classes,
+    courses,
+    chapters,
+    unlockedChapters,
+    unlockedCourses,
+    lessons,
+    lessonViews,
+    categories,
+    deleteUser,
+    updateUser,
+    adminAddUser,
+    revokeUserSessions,
+    adminUnlockCategory,
+    adminUnlockCategories,
+    adminUnlockCourse,
+    adminUnlockCourses,
+    adminUnlockChapter,
+    adminUnlockChapters,
+    adminRevokeCourse,
+    adminRevokeChapter,
+    adminBatchRevokeCourses,
+  } = useGlobalStore();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [showActions, setShowActions] = useState(null);
@@ -35,6 +59,35 @@ export default function UsersManagement() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+
+  // Student Access & Unlocks Modal state
+  const [managingAccessUser, setManagingAccessUser] = useState(null);
+  const [accessTab, setAccessTab] = useState("category"); // 'category' | 'course' | 'chapter'
+  const [selCatId, setSelCatId] = useState("");
+  const [selCourseId, setSelCourseId] = useState("");
+  const [selCourseContextCat, setSelCourseContextCat] = useState("");
+  const [selChapterId, setSelChapterId] = useState("");
+  const [accessMsg, setAccessMsg] = useState("");
+  const [accessLoading, setAccessLoading] = useState(false);
+  // Batch multi-select state
+  const [selectedCatsToUnlock, setSelectedCatsToUnlock] = useState(new Set());
+  const [selectedCoursesToUnlock, setSelectedCoursesToUnlock] = useState(new Set());
+  const [selectedChaptersToUnlock, setSelectedChaptersToUnlock] = useState(new Set());
+  const [courseSearchFilter, setCourseSearchFilter] = useState("");
+
+  const openAccessModal = (user) => {
+    setManagingAccessUser(user);
+    setAccessMsg("");
+    setSelectedCatsToUnlock(new Set());
+    setSelectedCoursesToUnlock(new Set());
+    setSelectedChaptersToUnlock(new Set());
+    setCourseSearchFilter("");
+    setSelCatId("");
+    setSelCourseId("");
+    setSelCourseContextCat("");
+    setSelChapterId("");
+    setShowActions(null);
+  };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
@@ -269,6 +322,7 @@ export default function UsersManagement() {
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الرقم القومي</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الأجهزة المسموحة</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الحالة</th>
+                <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">المواد والاشتراكات</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap">الإنجاز</th>
                 <th className="p-4 font-bold text-slate-600 text-sm whitespace-nowrap"></th>
               </tr>
@@ -317,6 +371,16 @@ export default function UsersManagement() {
                       </span>
                     </td>
                     <td className="p-4">
+                      <button
+                        onClick={() => openAccessModal(user)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-[#C4963A] text-[#C4963A] hover:text-white border border-[#C4963A]/30 text-xs font-black transition-all shadow-sm"
+                        title="فتح كورسات أو مواد أو فصول لهذا الطالب"
+                      >
+                        <Key className="w-3.5 h-3.5" />
+                        <span>فتح المواد 🔑</span>
+                      </button>
+                    </td>
+                    <td className="p-4">
                       <div className="flex items-center gap-2">
                          <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="bg-[#C4963A] h-full transition-all duration-1000" style={{ width: `${calculateProgress(user.id)}%` }} />
@@ -333,7 +397,13 @@ export default function UsersManagement() {
                       </button>
                       
                         {showActions === user.id && (
-                          <div className="absolute left-[30px] top-full mt-2 w-56 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] p-2 animate-in fade-in zoom-in-95 slide-in-from-top-2">
+                          <div className="absolute left-[30px] top-full mt-2 w-64 bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] border border-slate-100 z-[100] p-2 animate-in fade-in zoom-in-95 slide-in-from-top-2">
+                            <button 
+                              onClick={() => openAccessModal(user)}
+                              className="w-full flex items-center gap-2 p-3 text-sm font-bold text-[#C4963A] hover:bg-[#FDF8F0] rounded-xl transition-all"
+                            >
+                              <Key className="w-4 h-4" /> فتح وإدارة المواد والاشتراكات
+                            </button>
                             <button 
                               onClick={() => {
                                 setEditingUser(user);
@@ -656,6 +726,539 @@ export default function UsersManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── مودال إدارة اشتراكات ومواد الطالب ── */}
+      {managingAccessUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 border border-slate-100" dir="rtl">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-[#C4963A] flex items-center justify-center border border-amber-200">
+                  <Key className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">
+                    إدارة مواد واشتراكات: {managingAccessUser.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    رقم الهاتف: {managingAccessUser.phone} | فتح أو إغلاق الكورسات والمواد والفصول للطالب
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setManagingAccessUser(null);
+                  setAccessMsg("");
+                }}
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Notification / Alert */}
+            {accessMsg && (
+              <div className="p-3.5 rounded-xl bg-green-50 border border-green-200 text-green-800 text-sm font-bold text-center animate-in fade-in">
+                {accessMsg}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAccessTab("category")}
+                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all ${
+                  accessTab === "category"
+                    ? "bg-[#C4963A] text-white shadow-md shadow-[#C4963A]/20"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                فتح كورس كامل 🎓
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessTab("course")}
+                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all ${
+                  accessTab === "course"
+                    ? "bg-[#C4963A] text-white shadow-md shadow-[#C4963A]/20"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                فتح مادة دراسية 📚
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessTab("chapter")}
+                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all ${
+                  accessTab === "chapter"
+                    ? "bg-[#C4963A] text-white shadow-md shadow-[#C4963A]/20"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                فتح باب / فصل 📖
+              </button>
+            </div>
+
+            {/* Tab 1: Category */}
+            {accessTab === "category" && (
+              <div className="space-y-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black text-slate-700">
+                    اختر الكورسات لتفعيلها بجميع موادها وفصولها للطالب:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCatsToUnlock(new Set(categories.map((c) => c.id)))}
+                      className="text-[11px] font-bold text-[#C4963A] hover:underline"
+                    >
+                      تحديد الكل ({categories.length})
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCatsToUnlock(new Set())}
+                      className="text-[11px] font-bold text-slate-400 hover:text-slate-600"
+                    >
+                      إلغاء التحديد
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+                  {categories.map((c) => {
+                    const isChecked = selectedCatsToUnlock.has(c.id);
+                    const catCourseCount = courses.filter((crs) => {
+                      if (crs.categoryId === c.id) return true;
+                      if (Array.isArray(crs.categoryIds) && crs.categoryIds.map(Number).includes(c.id)) return true;
+                      const matchClass = classes.find((cl) => cl.id === crs.classId);
+                      return matchClass && matchClass.categoryId === c.id;
+                    }).length;
+
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => {
+                          const next = new Set(selectedCatsToUnlock);
+                          if (next.has(c.id)) next.delete(c.id);
+                          else next.add(c.id);
+                          setSelectedCatsToUnlock(next);
+                        }}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                          isChecked
+                            ? "bg-amber-50/60 border-[#C4963A] text-slate-900 shadow-sm"
+                            : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="w-4 h-4 text-[#C4963A] rounded border-slate-300 focus:ring-[#C4963A] pointer-events-none"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black truncate">{c.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{catCourseCount} مواد دراسية</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={selectedCatsToUnlock.size === 0 || accessLoading}
+                  onClick={async () => {
+                    setAccessLoading(true);
+                    const res = await adminUnlockCategories(
+                      managingAccessUser.id,
+                      Array.from(selectedCatsToUnlock)
+                    );
+                    setAccessLoading(false);
+                    setAccessMsg(res.message);
+                    setSelectedCatsToUnlock(new Set());
+                  }}
+                  className="w-full py-3.5 bg-[#C4963A] hover:bg-[#b8872e] text-white font-black text-sm rounded-xl transition-all shadow-md shadow-[#C4963A]/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {accessLoading ? (
+                    "جاري التفعيل..."
+                  ) : (
+                    <>
+                      <span>تفعيل الكورسات المحددة للطالب ({selectedCatsToUnlock.size})</span>
+                      <span>🚀</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Tab 2: Course (Subject) */}
+            {accessTab === "course" && (
+              <div className="space-y-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-100">
+                {/* Context Selector */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">
+                    أين يتم فتح المواد للطالب؟ (السياق)
+                  </label>
+                  <select
+                    value={selCourseContextCat}
+                    onChange={(e) => setSelCourseContextCat(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#C4963A]"
+                  >
+                    <option value="">⭐ مواد منفصلة / مستقلة (المواد في الصفحة الرئيسية والهيدر)</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        ضمن كورس: {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400">
+                    ملاحظة: إذا اخترت "ضمن كورس"، ستُفتح المواد للطالب داخل هذا الكورس فقط ولن تُفتح في المواد المستقلة.
+                  </p>
+                </div>
+
+                {/* Filter & Selection header */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-200/60">
+                  <input
+                    type="text"
+                    value={courseSearchFilter}
+                    onChange={(e) => setCourseSearchFilter(e.target.value)}
+                    placeholder="ابحث عن مادة دراسية بالاسم..."
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-[#C4963A]"
+                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    {(() => {
+                      const displayCourses = courses.filter((c) =>
+                        !courseSearchFilter.trim() || c.name.toLowerCase().includes(courseSearchFilter.trim().toLowerCase())
+                      );
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCoursesToUnlock(new Set(displayCourses.map((c) => c.id)))}
+                            className="text-[11px] font-bold text-[#C4963A] hover:underline"
+                          >
+                            تحديد الكل ({displayCourses.length})
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCoursesToUnlock(new Set())}
+                            className="text-[11px] font-bold text-slate-400 hover:text-slate-600"
+                          >
+                            إلغاء
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Courses Checklist */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+                  {courses
+                    .filter((c) =>
+                      !courseSearchFilter.trim() || c.name.toLowerCase().includes(courseSearchFilter.trim().toLowerCase())
+                    )
+                    .map((c) => {
+                      const isChecked = selectedCoursesToUnlock.has(c.id);
+                      const crsChaptersCount = chapters.filter((ch) => ch.courseId === c.id).length;
+                      return (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            const next = new Set(selectedCoursesToUnlock);
+                            if (next.has(c.id)) next.delete(c.id);
+                            else next.add(c.id);
+                            setSelectedCoursesToUnlock(next);
+                          }}
+                          className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                            isChecked
+                              ? "bg-amber-50/60 border-[#C4963A] text-slate-900 shadow-sm"
+                              : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="w-4 h-4 text-[#C4963A] rounded border-slate-300 focus:ring-[#C4963A] pointer-events-none"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black truncate">{c.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{crsChaptersCount} فصول / أبواب</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={selectedCoursesToUnlock.size === 0 || accessLoading}
+                  onClick={async () => {
+                    setAccessLoading(true);
+                    const res = await adminUnlockCourses(
+                      managingAccessUser.id,
+                      Array.from(selectedCoursesToUnlock),
+                      selCourseContextCat || null
+                    );
+                    setAccessLoading(false);
+                    setAccessMsg(res.message);
+                    setSelectedCoursesToUnlock(new Set());
+                  }}
+                  className="w-full py-3.5 bg-[#C4963A] hover:bg-[#b8872e] text-white font-black text-sm rounded-xl transition-all shadow-md shadow-[#C4963A]/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {accessLoading ? (
+                    "جاري التفعيل..."
+                  ) : (
+                    <>
+                      <span>تفعيل المواد المحددة للطالب ({selectedCoursesToUnlock.size} مادة)</span>
+                      <span>🚀</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Tab 3: Chapter */}
+            {accessTab === "chapter" && (
+              <div className="space-y-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-100">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">اختر المادة الدراسية أولاً:</label>
+                  <select
+                    value={selCourseId}
+                    onChange={(e) => {
+                      setSelCourseId(e.target.value);
+                      setSelectedChaptersToUnlock(new Set());
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#C4963A]"
+                  >
+                    <option value="">اختر المادة الدراسية</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selCourseId && (
+                  <>
+                    {(() => {
+                      const courseChapters = chapters.filter(
+                        (ch) => ch.courseId === parseInt(selCourseId)
+                      );
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-black text-slate-700">
+                              اختر الفصول المراد فتحها:
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedChaptersToUnlock(new Set(courseChapters.map((ch) => ch.id)))}
+                                className="text-[11px] font-bold text-[#C4963A] hover:underline"
+                              >
+                                تحديد الكل ({courseChapters.length})
+                              </button>
+                              <span className="text-slate-300">|</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedChaptersToUnlock(new Set())}
+                                className="text-[11px] font-bold text-slate-400 hover:text-slate-600"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto p-1">
+                            {courseChapters.map((ch) => {
+                              const isChecked = selectedChaptersToUnlock.has(ch.id);
+                              return (
+                                <div
+                                  key={ch.id}
+                                  onClick={() => {
+                                    const next = new Set(selectedChaptersToUnlock);
+                                    if (next.has(ch.id)) next.delete(ch.id);
+                                    else next.add(ch.id);
+                                    setSelectedChaptersToUnlock(next);
+                                  }}
+                                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                                    isChecked
+                                      ? "bg-amber-50/60 border-[#C4963A] text-slate-900 shadow-sm"
+                                      : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {}}
+                                    className="w-4 h-4 text-[#C4963A] rounded border-slate-300 focus:ring-[#C4963A] pointer-events-none"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black truncate">{ch.name}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold">
+                                      {Number(ch.price || 0) > 0 ? `${ch.price} ج.م` : "فصل مجاني"}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={selectedChaptersToUnlock.size === 0 || accessLoading}
+                            onClick={async () => {
+                              setAccessLoading(true);
+                              const res = await adminUnlockChapters(
+                                managingAccessUser.id,
+                                Array.from(selectedChaptersToUnlock)
+                              );
+                              setAccessLoading(false);
+                              setAccessMsg(res.message);
+                              setSelectedChaptersToUnlock(new Set());
+                            }}
+                            className="w-full py-3.5 bg-[#C4963A] hover:bg-[#b8872e] text-white font-black text-sm rounded-xl transition-all shadow-md shadow-[#C4963A]/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {accessLoading ? (
+                              "جاري التفعيل..."
+                            ) : (
+                              <>
+                                <span>تفعيل الفصول المحددة للطالب ({selectedChaptersToUnlock.size} فصل)</span>
+                                <span>🚀</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* List of currently unlocked items for this student */}
+            <div className="pt-4 border-t border-slate-100 space-y-3">
+              <h4 className="text-sm font-black text-slate-800">
+                المواد والاشتراكات المفتوحة حالياً للطالب:
+              </h4>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {(() => {
+                  const userUnlockedCourses = (unlockedCourses || []).filter(
+                    (u) =>
+                      u.userId === managingAccessUser.id ||
+                      u.user_id === managingAccessUser.id
+                  );
+                  const userUnlockedChapters = (unlockedChapters || []).filter(
+                    (u) =>
+                      u.userId === managingAccessUser.id ||
+                      u.user_id === managingAccessUser.id
+                  );
+
+                  if (userUnlockedCourses.length === 0 && userUnlockedChapters.length === 0) {
+                    return (
+                      <p className="text-xs text-slate-400 font-bold py-2 text-center">
+                        لا توجد مواد أو فصول مفتوحة لهذا الطالب بعد.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {userUnlockedCourses.map((u, idx) => {
+                        const crs = courses.find((c) => c.id === parseInt(u.courseId || u.course_id));
+                        const cat = categories.find((c) => c.id === parseInt(u.categoryId || u.category_id));
+                        return (
+                          <div
+                            key={`crs-${idx}`}
+                            className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              <span className="text-slate-800">{crs?.name || `مادة #${u.courseId || u.course_id}`}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-amber-50 text-[#C4963A] border border-amber-200 text-[10px]">
+                                {cat ? `كورس: ${cat.name}` : "مادة منفصلة / مستقلة"}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (confirm("هل أنت متأكد من إلغاء تفعيل هذه المادة للطالب؟")) {
+                                  await adminRevokeCourse(
+                                    managingAccessUser.id,
+                                    u.courseId || u.course_id,
+                                    u.categoryId || u.category_id
+                                  );
+                                  setAccessMsg("تم إلغاء التفعيل بنجاح");
+                                }
+                              }}
+                              className="px-2.5 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-black"
+                            >
+                              إلغاء التفعيل ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {userUnlockedChapters.map((u, idx) => {
+                        const ch = chapters.find((c) => c.id === parseInt(u.chapterId || u.chapter_id));
+                        const crs = courses.find((c) => c.id === parseInt(ch?.courseId));
+                        return (
+                          <div
+                            key={`ch-${idx}`}
+                            className="flex items-center justify-between p-3 bg-slate-50/70 rounded-xl border border-slate-100 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              <span className="text-slate-700">باب: {ch?.name || `باب #${u.chapterId || u.chapter_id}`}</span>
+                              {crs && <span className="text-slate-400 text-[10px]">({crs.name})</span>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (confirm("هل أنت متأكد من قفل هذا الفصل للطالب؟")) {
+                                  await adminRevokeChapter(
+                                    managingAccessUser.id,
+                                    u.chapterId || u.chapter_id
+                                  );
+                                  setAccessMsg("تم قفل الفصل بنجاح");
+                                }
+                              }}
+                              className="px-2.5 py-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors font-black"
+                            >
+                              قفل الفصل ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setManagingAccessUser(null);
+                  setAccessMsg("");
+                }}
+                className="w-full py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-sm transition-colors"
+              >
+                إغلاق النافذة
+              </button>
+            </div>
           </div>
         </div>
       )}

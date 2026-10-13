@@ -74,7 +74,7 @@ export default function LearningJourney() {
               label="Bridge Academy"
               className="size-16 md:size-20 border-[#C4963A] bg-[#C4963A] text-white shadow-[#C4963A] shadow-2xl"
             >
-              <span className="text-2xl font-bold text-[#C4963A]">ف</span>
+              <span className="text-2xl font-bold text-[#C4963A]">B</span>
             </Circle>
 
             {/* Student Node */}

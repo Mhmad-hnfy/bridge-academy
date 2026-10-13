@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useState, useEffect, useRef } from "react";
+import React, { use, useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -14,9 +14,11 @@ import {
   Download,
   ShieldCheck,
   Eye,
-  ExternalLink
+  ExternalLink,
+  Video
 } from "lucide-react";
 import { useGlobalStore } from "@/lib/store";
+import { parseVideoSource } from "@/lib/videoHelper";
 
 // Extract Youtube ID
 const getYoutubeID = (url) => {
@@ -26,14 +28,30 @@ const getYoutubeID = (url) => {
 };
 
 export default function LessonDetailPage({ params }) {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center font-bold text-slate-500">جاري التحميل...</div>}>
+      <LessonDetailContent params={params} />
+    </React.Suspense>
+  );
+}
+
+function LessonDetailContent({ params }) {
   const unwrappedParams = use(params);
   const router = useRouter();
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const catIdParam = searchParams && searchParams.get("catId") ? parseInt(searchParams.get("catId")) : null;
   const lessonId = parseInt(unwrappedParams.lessonId, 10);
 
-  const { lessons, chapters, currentUser, unlockedChapters, lessonViews, viewCounts, incrementLessonView, verifyAndUseCode, isLoaded } = useGlobalStore();
+  const { lessons, chapters, currentUser, unlockedChapters, unlockedCourses, lessonViews, viewCounts, incrementLessonView, verifyAndUseCode, isLoaded, teacherFiles = [] } = useGlobalStore();
 
   const lesson = lessons.find(l => l.id === lessonId);
   const chapter = lesson ? chapters.find(c => c.id === parseInt(lesson.chapterId)) : null;
+
+  const lessonTeacherFiles = useMemo(() => {
+    return (teacherFiles || []).filter(
+      (f) => f.lessonId === lessonId || f.lesson_id === lessonId
+    );
+  }, [teacherFiles, lessonId]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -50,9 +68,23 @@ export default function LessonDetailPage({ params }) {
   const screenBlackoutRef = useRef(null);
 
   // SECURITY: currentUser is ALWAYS required — even free lessons need a login
-  // "free" only means no code is needed, NOT that anyone can watch without an account
+  const isCourseUnlocked = !!chapter && (
+    catIdParam
+      ? (unlockedCourses || []).some(
+          u => (u.userId === currentUser.id || u.user_id === currentUser.id) &&
+          parseInt(u.courseId || u.course_id) === parseInt(chapter.courseId) &&
+          parseInt(u.categoryId || u.category_id) === catIdParam
+        )
+      : (unlockedCourses || []).some(
+          u => (u.userId === currentUser.id || u.user_id === currentUser.id) &&
+          parseInt(u.courseId || u.course_id) === parseInt(chapter.courseId) &&
+          (!u.categoryId && !u.category_id)
+        )
+  );
+
   const isUnlocked = !!currentUser && !!chapter && (
-    (unlockedChapters || []).some(u => u.userId === currentUser.id && u.chapterId === chapter.id) ||
+    isCourseUnlocked ||
+    (unlockedChapters || []).some(u => (u.userId === currentUser.id || u.user_id === currentUser.id) && parseInt(u.chapterId || u.chapter_id) === chapter.id) ||
     Number(chapter.price || 0) === 0
   );
 
@@ -60,7 +92,7 @@ export default function LessonDetailPage({ params }) {
     e.preventDefault();
     if (!redeemCode || !currentUser) return;
     setIsRedeeming(true);
-    const result = await verifyAndUseCode(redeemCode, currentUser.id);
+    const result = await verifyAndUseCode(redeemCode, currentUser.id, catIdParam, chapter?.courseId);
     if (result.success) {
         setRedeemCode("");
         // Refresh so isUnlocked re-evaluates → video appears automatically
@@ -83,8 +115,11 @@ export default function LessonDetailPage({ params }) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
 
+  const rawVideoLink = lesson?.youtubeLink || lesson?.videoUrl || "";
+  const videoSource = useMemo(() => parseVideoSource(rawVideoLink), [rawVideoLink]);
+
   useEffect(() => {
-    if (!lessonId || !lesson?.youtubeLink || !isUnlocked) return;
+    if (!lessonId || videoSource.type !== 'youtube' || !isUnlocked) return;
 
     // Load YouTube API script if not present
     if (!window.YT) {
@@ -109,12 +144,11 @@ export default function LessonDetailPage({ params }) {
         try { playerRef.current.destroy(); playerRef.current = null; } catch(e) {}
       }
     };
-  }, [lessonId, lesson?.youtubeLink, isUnlocked]);
+  }, [lessonId, videoSource, isUnlocked]);
 
   const initPlayer = () => {
-    if (!lesson?.youtubeLink || !isUnlocked) return;
-    const videoId = getYoutubeID(lesson.youtubeLink);
-    if (!videoId) return;
+    if (videoSource.type !== 'youtube' || !videoSource.videoId || !isUnlocked) return;
+    const videoId = videoSource.videoId;
 
     // Clean up existing player before re-init
     if (playerRef.current) {
@@ -452,8 +486,15 @@ export default function LessonDetailPage({ params }) {
                 </button>
               </form>
 
-              <div className="mt-6 pt-6 border-t border-white/5 text-center">
-                <p className="text-slate-600 text-xs font-bold mb-3">مجاني إدخال الكود • بدون اشتراك شهري</p>
+              <div className="mt-6 pt-6 border-t border-white/5 text-center space-y-3">
+                <a
+                  href={`https://wa.me/201022714993?text=${encodeURIComponent(`مرحباً Bridge Academy 🎓، أريد الاشتراك وتفعيل كود لمتابعة الدروس.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-4 rounded-xl bg-[#25D366]/20 hover:bg-[#25D366]/30 text-[#25D366] font-black text-sm transition-all flex items-center justify-center gap-2 border border-[#25D366]/30"
+                >
+                  <span>اشترك الآن عبر واتساب للحصول على كود تفعيل</span>
+                </a>
                 <button onClick={() => router.back()} className="text-slate-500 hover:text-white text-sm font-bold transition-colors">
                   ← العودة للخلف
                 </button>
@@ -573,7 +614,22 @@ export default function LessonDetailPage({ params }) {
                 }}
               />
 
-              <div id="youtube-player" className="w-full h-full pointer-events-none"></div>
+               {videoSource.type === 'youtube' ? (
+                 <div id="youtube-player" className="w-full h-full pointer-events-none"></div>
+               ) : videoSource.type === 'bunny' || videoSource.type === 'generic' ? (
+                 <iframe
+                   src={videoSource.embedUrl}
+                   loading="lazy"
+                   className="w-full h-full border-0 absolute inset-0"
+                   allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+                   allowFullScreen={true}
+                 />
+               ) : (
+                 <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 font-bold p-6 text-center">
+                   <Video className="w-12 h-12 text-slate-500 mb-2 opacity-50" />
+                   <p>لا يوجد فيديو متاح لهذا الدرس حالياً</p>
+                 </div>
+               )}
 
               {/* ── Dynamic Watermark ── */}
               {/* Normal watermark - always visible but subtle */}
@@ -644,6 +700,7 @@ export default function LessonDetailPage({ params }) {
                  </div>
                )}
 
+               {videoSource.type === 'youtube' && (
                <div className="absolute inset-0 bg-transparent z-[40]" onContextMenu={(e) => e.preventDefault()} onClick={handleTouchPlayer}>
                  {/* Protection Layer covers the center to prevent direct iframe clicks, but controls are accessible */}
                  <div className="absolute inset-0 bg-transparent"></div>
@@ -738,6 +795,7 @@ export default function LessonDetailPage({ params }) {
                     </div>
                  </div>
               </div>
+               )}
            </div>
 
            {/* Lesson Assets & Links */}
@@ -748,14 +806,26 @@ export default function LessonDetailPage({ params }) {
                     المصادر والروابط الملحقة بالدرس
                  </h3>
                  {lesson.pdfFile && (
-                    <a 
-                      href={lesson.pdfFile} 
-                      download={`${lesson.name}-fahem.pdf`}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-sm font-bold border border-white/10 text-white"
-                    >
-                       <Download className="w-4 h-4" />
-                       تحميل PDF
-                    </a>
+                    lesson.pdfFile.startsWith("data:") ? (
+                      <a 
+                        href={lesson.pdfFile} 
+                        download={`${lesson.name}-fahem.pdf`}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 rounded-xl transition-all text-sm font-bold border border-emerald-500/30 text-emerald-300"
+                      >
+                         <Download className="w-4 h-4" />
+                         تحميل PDF
+                      </a>
+                    ) : (
+                      <a 
+                        href={lesson.pdfFile} 
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 rounded-xl transition-all text-sm font-bold border border-blue-500/30 text-blue-300"
+                      >
+                         <ExternalLink className="w-4 h-4" />
+                         {lesson.pdfFile.includes("drive.google.com") ? "فتح في Google Drive" : "فتح المذكرة"}
+                      </a>
+                    )
                  )}
               </div>
 
@@ -796,21 +866,83 @@ export default function LessonDetailPage({ params }) {
                      </div>
                      <div>
                         <p className="font-bold text-white">ملخص المحاضرة والخرائط الذهنية</p>
-                        <p className="text-xs text-slate-500 font-medium">اضغط للتحميل أو العرض المباشر</p>
+                        <p className="text-xs text-slate-500 font-medium">
+                          {lesson.pdfFile.includes("drive.google.com")
+                            ? "مرفوع على Google Drive"
+                            : "مستند PDF متاح للعرض والتحميل"}
+                        </p>
                      </div>
                    </div>
-                   <a 
-                     href={lesson.pdfFile} 
-                     target="_blank" 
-                     rel="noopener noreferrer"
-                     className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold transition-colors text-white"
-                   >
-                     عرض
-                   </a>
+                   <div className="flex items-center gap-2">
+                     {lesson.pdfFile.startsWith("data:") ? (
+                       <a 
+                         href={lesson.pdfFile} 
+                         download={`${lesson.name}-fahem.pdf`}
+                         className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold transition-colors text-white flex items-center gap-1.5 shadow-sm"
+                       >
+                         <Download className="w-3.5 h-3.5" />
+                         تحميل
+                       </a>
+                     ) : (
+                       <a 
+                         href={lesson.pdfFile} 
+                         target="_blank" 
+                         rel="noopener noreferrer"
+                         className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-bold transition-colors text-white flex items-center gap-1.5 shadow-sm"
+                       >
+                         <ExternalLink className="w-3.5 h-3.5" />
+                         {lesson.pdfFile.includes("drive.google.com") ? "فتح في Drive" : "عرض"}
+                       </a>
+                     )}
+                   </div>
                 </div>
               )}
 
-              {!(lesson.pdfFile || lesson.attachmentLink || lesson.attachment_link) && (
+              {/* Teacher Uploaded Files for this Lesson */}
+              {lessonTeacherFiles.map((file) => {
+                const isBase64 = file.fileUrl?.startsWith("data:");
+                const isDrive = file.fileUrl?.includes("drive.google.com");
+
+                return (
+                  <div key={file.id} className="bg-slate-800/50 border border-white/5 rounded-2xl p-4 flex items-center justify-between gap-4">
+                     <div className="flex items-center gap-3">
+                       <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-6 h-6" />
+                       </div>
+                       <div>
+                          <p className="font-bold text-white">{file.title}</p>
+                          <p className="text-xs text-slate-400 font-medium">
+                            {isDrive ? "مرفوع على Google Drive" : (file.fileSize ? `ملف PDF (${file.fileSize})` : "مذكرة PDF مرفوعة للمحاضرة")}
+                          </p>
+                       </div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       {isBase64 ? (
+                         <a 
+                           href={file.fileUrl} 
+                           download={`${file.title || "مذكرة"}.pdf`}
+                           className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold transition-colors text-white flex items-center gap-1.5 shadow-sm"
+                         >
+                           <Download className="w-3.5 h-3.5" />
+                           تحميل المذكرة
+                         </a>
+                       ) : (
+                         <a 
+                           href={file.fileUrl} 
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-bold transition-colors text-white flex items-center gap-1.5 shadow-sm"
+                         >
+                           <ExternalLink className="w-3.5 h-3.5" />
+                           {isDrive ? "فتح في Drive" : "عرض"}
+                         </a>
+                       )}
+                     </div>
+                  </div>
+                );
+              })}
+
+              {!(lesson.pdfFile || lesson.attachmentLink || lesson.attachment_link || lessonTeacherFiles.length > 0) && (
                 <p className="text-slate-500 font-bold text-center py-4">لا توجد مصادر أو روابط مرفقة لهذا الدرس</p>
               )}
            </div>

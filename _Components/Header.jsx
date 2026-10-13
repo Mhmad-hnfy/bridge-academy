@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Menu, User, LogOut, LayoutDashboard, Bell, Clock, Trash2 } from "lucide-react";
+import { X, Menu, User, LogOut, LayoutDashboard, Bell, Clock, Trash2, GraduationCap } from "lucide-react";
 import Link from "next/link";
 import { useGlobalStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ const C = {
 
 function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { currentUser, logoutUser, notifications, dismissedNotifications, dismissNotification } = useGlobalStore();
+  const { currentUser, currentTeacher, logoutUser, logoutTeacher, notifications, dismissedNotifications, dismissNotification } = useGlobalStore();
   const router = useRouter();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -220,6 +220,19 @@ function Header() {
           )}
 
           {/* Auth */}
+          {currentTeacher && (
+            <div className="hidden sm:flex items-center gap-2">
+              <Link
+                href="/teacher/dashboard"
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-xl text-xs font-black shadow-md hover:opacity-90 transition-all"
+                style={{ background: `linear-gradient(135deg, ${C.navy}, ${C.navyMid})` }}
+              >
+                <GraduationCap size={16} className="text-[#C4963A]" />
+                لوحة المعلم
+              </Link>
+            </div>
+          )}
+
           {currentUser ? (
             <div className="hidden sm:flex items-center gap-3">
               {currentUser.role === "admin" && (
@@ -338,6 +351,17 @@ function Header() {
                 >
                   <LayoutDashboard size={19} style={{ color: C.gold }} />
                   لوحة التحكّم
+                </Link>
+              )}
+              {currentTeacher && (
+                <Link
+                  href="/teacher/dashboard"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="px-4 py-3.5 rounded-xl text-base font-semibold flex items-center gap-2"
+                  style={{ color: C.navy }}
+                >
+                  <GraduationCap size={19} style={{ color: C.gold }} />
+                  لوحة المعلم
                 </Link>
               )}
             </nav>

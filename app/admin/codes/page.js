@@ -42,9 +42,17 @@ export default function CodesManagement() {
     (c) => c.categoryId === parseInt(formData.categoryId),
   );
 
-  const filteredCourses = courses.filter(
-    (c) => c.classId === parseInt(formData.classId),
-  );
+  const filteredCourses = courses.filter((c) => {
+    if (formData.classId) return c.classId === parseInt(formData.classId);
+    if (formData.categoryId) {
+      const catId = parseInt(formData.categoryId);
+      return (
+        c.categoryId === catId ||
+        (Array.isArray(c.categoryIds) && c.categoryIds.includes(catId))
+      );
+    }
+    return true;
+  });
 
   const filteredChapters = chapters.filter(
     (ch) => ch.courseId === parseInt(formData.courseId),
@@ -52,11 +60,16 @@ export default function CodesManagement() {
 
   const handleGenerate = (e) => {
     e.preventDefault();
+    if (!formData.courseId) {
+      alert("يرجى اختيار المادة الدراسية لتوليد الأكواد لها.");
+      return;
+    }
     generateCodes(generateCount, {
-      categoryId: parseInt(formData.categoryId),
-      classId: parseInt(formData.classId),
-      chapterId: parseInt(formData.chapterId),
-      maxUses: parseInt(formData.maxUses),
+      categoryId: formData.categoryId ? parseInt(formData.categoryId) : null,
+      classId: formData.classId ? parseInt(formData.classId) : null,
+      courseId: parseInt(formData.courseId),
+      chapterId: formData.chapterId ? parseInt(formData.chapterId) : null,
+      maxUses: parseInt(formData.maxUses) || 1,
     });
     setIsModalOpen(false);
   };
@@ -101,7 +114,7 @@ export default function CodesManagement() {
         <div>
           <h1 className="text-3xl font-black text-slate-800">إدارة الأكواد</h1>
           <p className="text-slate-500 font-medium">
-            توليد ومتابعة أكواد تفعيل الأبواب للمواد الدراسية
+            توليد ومتابعة أكواد تفعيل المواد الدراسية وفصولها
           </p>
         </div>
         <button
@@ -152,7 +165,10 @@ export default function CodesManagement() {
                   الكود
                 </th>
                 <th className="px-6 py-4 text-right text-sm font-black text-slate-600">
-                  الباب
+                  المادة الدراسية
+                </th>
+                <th className="px-6 py-4 text-right text-sm font-black text-slate-600">
+                  نطاق التفعيل
                 </th>
                 <th className="px-6 py-4 text-right text-sm font-black text-slate-600">
                   الاستخدام
@@ -171,6 +187,14 @@ export default function CodesManagement() {
             <tbody className="divide-y divide-slate-50">
               {sortedCodes.map((code) => {
                 const chapter = chapters.find((ch) => ch.id === code.chapterId);
+                const course = courses.find(
+                  (c) =>
+                    c.id ===
+                    (code.courseId ||
+                      (chapter ? chapter.courseId : null)),
+                );
+                const isFullCourse = !code.chapterId || !!code.courseId;
+
                 return (
                   <tr
                     key={code.id}
@@ -195,8 +219,30 @@ export default function CodesManagement() {
                     </td>
                     <td className="px-6 py-4">
                       <p className="font-bold text-slate-800">
-                        {chapter?.name || "باب غير معروف"}
+                        {course?.name || "مادة دراسية عامة"}
                       </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1 items-start">
+                        {code.categoryId ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[11px] font-black">
+                            كورس: {categories.find((c) => c.id === code.categoryId)?.name || code.categoryId}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[11px] font-black">
+                            مادة منفصلة / مستقلة
+                          </span>
+                        )}
+                        {isFullCourse ? (
+                          <span className="text-[10px] text-amber-600 font-bold">
+                            المادة كاملة ✨
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-500 font-bold">
+                            باب: {chapter?.name || "باب محدد"}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -294,63 +340,38 @@ export default function CodesManagement() {
             </div>
 
             <form onSubmit={handleGenerate} className="p-8 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-black text-slate-700 block pr-2">
-                    المرحلة
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-sm"
-                    value={formData.categoryId}
-                    onChange={(e) =>
-                      setFormData({ 
-                        ...formData, 
-                        categoryId: e.target.value, 
-                        classId: "", 
-                        courseId: "", 
-                        chapterId: "" 
-                      })
-                    }
-                    required
-                  >
-                    <option value="">اختر المرحلة</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-black text-slate-700 block pr-2">
-                    الصف
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-sm"
-                    value={formData.classId}
-                    onChange={(e) =>
-                      setFormData({ 
-                        ...formData, 
-                        classId: e.target.value, 
-                        courseId: "", 
-                        chapterId: "" 
-                      })
-                    }
-                    required
-                  >
-                    <option value="">اختر الصف</option>
-                    {filteredClasses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-2">
+                <label className="text-sm font-black text-slate-700 block pr-2">
+                  السياق: كورس معين أو مادة مستقلة
+                </label>
+                <select
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-sm"
+                  value={formData.categoryId}
+                  onChange={(e) =>
+                    setFormData({ 
+                      ...formData, 
+                      categoryId: e.target.value, 
+                      classId: "", 
+                      courseId: "", 
+                      chapterId: "" 
+                    })
+                  }
+                >
+                  <option value="">⭐ مادة منفصلة / مستقلة (المواد في الصفحة الرئيسية)</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      ضمن كورس: {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 pr-2">
+                  إذا اخترت "ضمن كورس"، سيعمل الكود داخل هذا الكورس فقط ولن يفتح المادة في المواد المنفصلة.
+                </p>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-black text-slate-700 block pr-2">
-                  المادة
+                  المادة الدراسية <span className="text-[#C4963A]">*</span>
                 </label>
                 <select
                   className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-sm"
@@ -360,7 +381,7 @@ export default function CodesManagement() {
                   }
                   required
                 >
-                  <option value="">اختر المادة</option>
+                  <option value="">اختر المادة الدراسية لتوليد الأكواد لها</option>
                   {filteredCourses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -371,7 +392,7 @@ export default function CodesManagement() {
 
               <div className="space-y-2">
                 <label className="text-sm font-black text-slate-700 block pr-2">
-                  الباب
+                  نطاق التفعيل
                 </label>
                 <select
                   className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-[#C4963A] focus:outline-none font-bold transition-all text-sm"
@@ -379,15 +400,17 @@ export default function CodesManagement() {
                   onChange={(e) =>
                     setFormData({ ...formData, chapterId: e.target.value })
                   }
-                  required
                 >
-                  <option value="">اختر الباب</option>
+                  <option value="">⭐ كود للمادة كاملة (شامل جميع الفصول والدروس)</option>
                   {filteredChapters.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      باب محدد فقط: {c.name}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-slate-400 pr-2">
+                  اترك الخيار "كود للمادة كاملة" ليقوم الكود بفتح جميع فصول ودروس المادة للطالب فور إدخاله.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

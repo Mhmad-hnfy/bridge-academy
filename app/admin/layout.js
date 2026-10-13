@@ -22,6 +22,8 @@ import {
   BookMarked,
   Home,
   MessageCircle,
+  FileQuestion,
+  BarChart3,
 } from "lucide-react";
 
 const menuGroups = [
@@ -38,6 +40,8 @@ const menuGroups = [
       { name: "المواد الدراسية", icon: BookOpen, href: "/admin/courses" },
       { name: "الأبواب والفصول", icon: ChevronLeft, href: "/admin/chapters" },
       { name: "الدروس", icon: Video, href: "/admin/lessons" },
+      { name: "بنك الامتحانات", icon: FileQuestion, href: "/admin/exam-bank" },
+      { name: "تقارير الكويزات", icon: BarChart3, href: "/admin/quiz-reports" },
     ],
   },
   {
