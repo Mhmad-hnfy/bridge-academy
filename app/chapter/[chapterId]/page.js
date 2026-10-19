@@ -285,8 +285,8 @@ function ChapterLessonsContent({ params }) {
                   )}
                 </div>
 
-                {/* Quiz Block (يظهر تحت الدرس لو فيه كويز) */}
-                {quiz && !quizPassed && !isLockedByQuiz && (
+                {/* Quiz Block (يظهر تحت الدرس لو فيه كويز أو الطالب فاتح مراجعته) */}
+                {quiz && (!quizPassed || isShowingQuiz) && !isLockedByQuiz && (
                   <div className="mx-4">
                     <div className="bg-gradient-to-r from-[#1B3668] to-[#24427D] rounded-b-[24px] p-5 border border-t-0 border-[#1B3668]/20">
                       {isShowingQuiz ? (
@@ -318,7 +318,7 @@ function ChapterLessonsContent({ params }) {
                           </div>
                           <button
                             onClick={() => setActiveQuizLessonId(lesson.id)}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-[#C4963A] hover:bg-[#b8872e] text-white font-black rounded-xl transition-all text-sm shrink-0"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#C4963A] hover:bg-[#b8872e] text-white font-black rounded-xl transition-all text-sm shrink-0 cursor-pointer"
                           >
                             <Play className="w-4 h-4 fill-current" />
                             ابدأ الكويز
@@ -329,18 +329,26 @@ function ChapterLessonsContent({ params }) {
                   </div>
                 )}
 
-                {/* Passed Quiz Badge */}
-                {quiz && quizPassed && (
+                {/* Passed Quiz Badge (يظهر عندما يكون الكويز مجتازاً وليس مفتوحاً للمراجعة) */}
+                {quiz && quizPassed && !isShowingQuiz && (
                   <div className="mx-4">
-                    <div className="bg-green-50 border border-green-100 border-t-0 rounded-b-[16px] px-5 py-3 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      <span className="text-green-700 font-bold text-sm">
-                        اجتزت الكويز بنجاح — نسبتك: {
-                          (quizAttempts || [])
-                            .filter(a => a.userId === currentUser?.id && a.lessonQuizId === quiz.id && a.passed)
-                            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]?.score
-                        }%
-                      </span>
+                    <div className="bg-green-50 border border-green-100 border-t-0 rounded-b-[16px] px-5 py-3 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className="text-green-700 font-bold text-sm">
+                          اجتزت الكويز بنجاح — نسبتك: {
+                            (quizAttempts || [])
+                              .filter(a => a.userId === currentUser?.id && a.lessonQuizId === quiz.id && a.passed)
+                              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]?.score
+                          }%
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setActiveQuizLessonId(lesson.id)}
+                        className="text-xs font-black px-3 py-1.5 bg-white border border-green-300 text-green-700 hover:bg-green-100 rounded-xl transition-colors cursor-pointer"
+                      >
+                        📋 مراجعة إجاباتي والأسئلة
+                      </button>
                     </div>
                   </div>
                 )}

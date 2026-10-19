@@ -56,33 +56,50 @@ export default function ExamBankPage() {
 
   // ── handlers ──
   const handleSaveBank = async () => {
-    if (!bankForm.name || !bankForm.subjectName) {
-      alert("اسم الامتحان واسم المادة مطلوبان"); return;
+    const examName = bankForm.name?.trim();
+    if (!examName) {
+      alert("يرجى كتابة اسم الامتحان أولاً"); return;
     }
+    const selectedCourse = (courses || []).find(c => String(c.id) === String(bankForm.courseId));
+    const subjectName = bankForm.subjectName?.trim() || selectedCourse?.name || "عام";
+
+    const payload = {
+      name: examName,
+      subjectName: subjectName,
+      courseId: bankForm.courseId ? parseInt(bankForm.courseId, 10) : null,
+      createdByAdmin: true,
+    };
     if (editingBank) {
-      await updateExamBank(editingBank.id, bankForm);
+      await updateExamBank(editingBank.id, payload);
     } else {
-      await addExamBank(bankForm);
+      const res = await addExamBank(payload);
+      if (res?.id) setExpandedBank(res.id);
     }
     setBankModal(false); setEditingBank(null);
     setBankForm({ name: "", subjectName: "", courseId: "" });
   };
 
   const handleSaveQuestion = async () => {
-    if (!questionForm.questionText && !questionForm.questionImage) {
+    if (!questionForm.questionText?.trim() && !questionForm.questionImage) {
       alert("يجب كتابة نص السؤال أو رفع صورة"); return;
     }
+    const payload = {
+      examBankId: parseInt(questionForm.examBankId, 10),
+      questionText: questionForm.questionText?.trim() || "",
+      questionImage: questionForm.questionImage || "",
+      sortOrder: parseInt(questionForm.sortOrder, 10) || 0,
+    };
     if (editingQuestion) {
-      await updateExamQuestion(editingQuestion.id, questionForm);
+      await updateExamQuestion(editingQuestion.id, payload);
     } else {
-      await addExamQuestion(questionForm);
+      await addExamQuestion(payload);
     }
     setQuestionModal(false); setEditingQuestion(null);
     setQuestionForm({ examBankId: "", questionText: "", questionImage: "", sortOrder: 0 });
   };
 
   const handleSaveChoice = async () => {
-    if (!choiceForm.choiceText) { alert("نص الخيار مطلوب"); return; }
+    if (!choiceForm.choiceText?.trim()) { alert("نص الخيار مطلوب"); return; }
     // ensure only one correct per question
     if (choiceForm.isCorrect && !editingChoice) {
       const existing = getChoicesForQuestion(choiceForm.questionId);
@@ -93,10 +110,16 @@ export default function ExamBankPage() {
         await updateExamChoice(alreadyCorrect.id, { isCorrect: false });
       }
     }
+    const payload = {
+      questionId: parseInt(choiceForm.questionId, 10),
+      choiceText: choiceForm.choiceText.trim(),
+      isCorrect: !!choiceForm.isCorrect,
+      sortOrder: parseInt(choiceForm.sortOrder, 10) || 0,
+    };
     if (editingChoice) {
-      await updateExamChoice(editingChoice.id, choiceForm);
+      await updateExamChoice(editingChoice.id, payload);
     } else {
-      await addExamChoice(choiceForm);
+      await addExamChoice(payload);
     }
     setChoiceModal(false); setEditingChoice(null);
     setChoiceForm({ questionId: "", choiceText: "", isCorrect: false, sortOrder: 0 });
@@ -352,7 +375,15 @@ export default function ExamBankPage() {
                 <label className="block text-sm font-black text-slate-700 mb-2">الكورس المرتبط (اختياري)</label>
                 <select
                   value={bankForm.courseId}
-                  onChange={e => setBankForm({ ...bankForm, courseId: e.target.value })}
+                  onChange={e => {
+                    const cId = e.target.value;
+                    const cObj = (courses || []).find(c => String(c.id) === String(cId));
+                    setBankForm(prev => ({
+                      ...prev,
+                      courseId: cId,
+                      subjectName: prev.subjectName || cObj?.name || ""
+                    }));
+                  }}
                   className="w-full border border-slate-200 rounded-xl p-3 focus:border-[#C4963A] outline-none font-bold text-sm bg-white"
                 >
                   <option value="">بدون ربط بكورس</option>
