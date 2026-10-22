@@ -121,22 +121,21 @@ export default function TeacherVideosPage() {
       videoUrl,
       youtubeLink: videoUrl,
       chapterId,
-      maxViews,
-      active,
+      status: active ? "نشط" : "غير نشط",
     };
 
     if (editingLesson) {
       updateLesson(editingLesson.id, payload);
+      closeModal();
       showToast("تم تحديث بيانات الفيديو بنجاح.");
     } else {
       addLesson({
-        id: Date.now(),
         ...payload,
         sortOrder: teacherLessons.length + 1,
       });
-      showToast("تمت إضافة الفيديو الجديد بنجاح.");
+      closeModal();
+      showToast("تمت إضافة الفيديو الجديد بنجاح. يرجى الانتظار...");
     }
-    closeModal();
   };
 
   return (

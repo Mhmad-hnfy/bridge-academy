@@ -153,11 +153,23 @@ export default function LessonsManagement() {
       const matchesSearch = l.name.toLowerCase().includes(searchQuery.toLowerCase());
       const chap = chapters.find(ch => ch.id === parseInt(l.chapterId));
       const course = courses.find(co => co.id === chap?.courseId);
-      const catId = l.categoryId || course?.categoryId || classes.find(cl => cl.id === course?.classId)?.categoryId;
-      const matchesCategory = !filterCategory || catId === parseInt(filterCategory);
+      
+      let matchesCategory = true;
+      if (filterCategory) {
+        const catFilterNum = parseInt(filterCategory);
+        const lCatId = l.categoryId ? parseInt(l.categoryId) : null;
+        const cCatIds = Array.isArray(course?.categoryIds) ? course.categoryIds.map(Number) : [];
+        const clCatId = classes.find(cl => cl.id === course?.classId)?.categoryId;
+        matchesCategory = 
+          lCatId === catFilterNum ||
+          course?.categoryId === catFilterNum ||
+          cCatIds.includes(catFilterNum) ||
+          clCatId === catFilterNum;
+      }
+      
       const matchesStatus = !filterStatus || l.status === filterStatus;
       
-      let matchesChapter = !filterChapter || l.chapterId === parseInt(filterChapter);
+      let matchesChapter = !filterChapter || parseInt(l.chapterId) === parseInt(filterChapter);
       
       if (filterCourse && !filterChapter) {
         matchesChapter = chap?.courseId === parseInt(filterCourse);
@@ -174,11 +186,15 @@ export default function LessonsManagement() {
     categories.forEach(cat => {
       const catCourses = [];
       
-      courses.filter(course => (course.categoryId === cat.id || classes.find(cl => cl.id === course.classId)?.categoryId === cat.id)).forEach(course => {
+      courses.filter(course => {
+        if (course.categoryId === cat.id) return true;
+        if (Array.isArray(course.categoryIds) && course.categoryIds.map(Number).includes(cat.id)) return true;
+        return classes.find(cl => cl.id === course.classId)?.categoryId === cat.id;
+      }).forEach(course => {
         const courseChapters = [];
         
         chapters.filter(ch => ch.courseId === course.id).forEach(ch => {
-          const chLessons = displayedLessons.filter(l => l.chapterId === ch.id);
+          const chLessons = displayedLessons.filter(l => parseInt(l.chapterId) === parseInt(ch.id));
           if (chLessons.length > 0) {
             courseChapters.push({
               ...ch,
@@ -294,12 +310,15 @@ export default function LessonsManagement() {
     delete submissionData.courseId;
 
     if (editingLesson) {
-      updateLesson(editingLesson.id, submissionData);
+      await updateLesson(editingLesson.id, submissionData);
       setIsModalOpen(false);
       resetForm();
     } else {
-      await addLesson(submissionData);
+      const added = await addLesson(submissionData);
       setIsModalOpen(false);
+      if (submissionData.chapterId) {
+        setExpandedChapters((prev) => ({ ...prev, [submissionData.chapterId]: true }));
+      }
       resetForm();
     }
   };
