@@ -39,6 +39,7 @@ create table if not exists public.lesson_quizzes (
   pass_percentage int default 50,
   locks_next_lessons boolean default true,
   retry_hours int default 4,    -- عدد ساعات الانتظار قبل إعادة المحاولة
+  duration_minutes int default 0, -- مدة الاختبار بالدقائق (0 تعني مفتوح بدون وقت)
   created_at timestamptz default now(),
   unique(lesson_id)    -- كويز واحد لكل درس
 );

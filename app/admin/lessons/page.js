@@ -34,6 +34,8 @@ import {
   Shield,
   FileQuestion,
   Video,
+  Clock,
+  Timer,
 } from "lucide-react";
 import ImageUpload from "@/Components/ImageUpload";
 import PdfOrDriveUpload from "@/Components/PdfOrDriveUpload";
@@ -64,7 +66,7 @@ export default function LessonsManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   // Quiz linking state
   const [quizModal, setQuizModal] = useState(null); // lesson object
-  const [quizForm, setQuizForm] = useState({ examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4 });
+  const [quizForm, setQuizForm] = useState({ examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4, durationMinutes: 0 });
 
   // Drag-and-drop state for lesson reordering
   const dragLessonId = useRef(null);
@@ -757,7 +759,8 @@ export default function LessonsManagement() {
                                                             passPercentage: existing.passPercentage || 50,
                                                             locksNextLessons: existing.locksNextLessons !== false,
                                                             retryHours: existing.retryHours || 4,
-                                                          } : { examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4 });
+                                                            durationMinutes: existing.durationMinutes ?? existing.duration_minutes ?? 0,
+                                                          } : { examBankId: "", passPercentage: 50, locksNextLessons: true, retryHours: 4, durationMinutes: 0 });
                                                           setQuizModal(lesson);
                                                         }}
                                                         className={`p-2 rounded-xl transition-all border ${ 
@@ -1277,6 +1280,66 @@ export default function LessonsManagement() {
                 </select>
               </div>
 
+              {/* مدة الامتحان بالدقائق (إجبار الطالب على وقت محدد) */}
+              <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#C4963A]" />
+                    مدة الامتحان (إجبار الطالب على توقيت محدد):
+                  </label>
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                    quizForm.durationMinutes > 0 
+                      ? "bg-amber-100 text-amber-900 border border-amber-300" 
+                      : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {quizForm.durationMinutes > 0 ? `${quizForm.durationMinutes} دقيقة` : "مفتوح (بدون وقت)"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={0}
+                    max={360}
+                    step={1}
+                    value={quizForm.durationMinutes}
+                    onChange={e => setQuizForm({ ...quizForm, durationMinutes: Math.max(0, parseInt(e.target.value) || 0) })}
+                    placeholder="0 = بدون وقت محدد"
+                    className="w-32 border border-slate-300 rounded-xl p-2.5 focus:border-[#C4963A] outline-none font-black text-base bg-white text-center"
+                  />
+                  <span className="text-xs font-bold text-slate-500">دقائق</span>
+                </div>
+
+                {/* خيارات سريعة للمدة */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    { label: "بدون وقت (0)", val: 0 },
+                    { label: "10 دقائق", val: 10 },
+                    { label: "15 دقيقة", val: 15 },
+                    { label: "20 دقيقة", val: 20 },
+                    { label: "30 دقيقة", val: 30 },
+                    { label: "45 دقيقة", val: 45 },
+                    { label: "60 دقيقة", val: 60 },
+                  ].map(preset => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setQuizForm({ ...quizForm, durationMinutes: preset.val })}
+                      className={`text-xs font-black px-2.5 py-1 rounded-lg transition-all ${
+                        Number(quizForm.durationMinutes) === preset.val
+                          ? "bg-[#C4963A] text-white shadow"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                  ⚠️ عند تحديد وقت، سيظهر للطالب عداد تنازلي إجباري وسيتم تسليم الامتحان تلقائياً فور انتهاء الوقت المحدد لمنع الغش والتأخير.
+                </p>
+              </div>
+
               {/* إعداد القفل */}
               <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
                 <input
@@ -1302,6 +1365,7 @@ export default function LessonsManagement() {
                       passPercentage: quizForm.passPercentage,
                       locksNextLessons: quizForm.locksNextLessons,
                       retryHours: quizForm.retryHours,
+                      durationMinutes: parseInt(quizForm.durationMinutes) || 0,
                     };
                     if (existing) await updateLessonQuiz(existing.id, payload);
                     else await addLessonQuiz(payload);

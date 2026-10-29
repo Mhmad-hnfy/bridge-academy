@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Clock, CheckCircle2, XCircle, AlertTriangle, Trophy,
-  Play, ShieldCheck, ArrowLeft, ChevronRight
+  Play, ShieldCheck, ArrowLeft, ChevronRight, Timer
 } from "lucide-react";
 import { useGlobalStore } from "@/lib/store";
 
@@ -105,6 +105,8 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
     ? (examQuestions || []).filter(q => q.examBankId === bank.id).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
     : [];
 
+  const durationMinutes = Number(quiz?.durationMinutes ?? quiz?.duration_minutes ?? 0);
+
   const lastAttempt  = (quizAttempts || [])
     .filter(a => a.userId === currentUser?.id && a.lessonQuizId === quiz?.id)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
@@ -119,12 +121,108 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
   const [score, setScore]             = useState(0);
   const [submitting, setSubmitting]   = useState(false);
   const [retryExpired, setRetryExpired] = useState(false);
+  const [timeLeftMs, setTimeLeftMs]   = useState(null);
+  const [autoSubmittedByTimeout, setAutoSubmittedByTimeout] = useState(false);
+
+  // Refs for callbacks to avoid stale closures in interval
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+
+  const selectedChoiceRef = useRef(selectedChoice);
+  selectedChoiceRef.current = selectedChoice;
+
+  const currentQRef = useRef(currentQ);
+  currentQRef.current = currentQ;
+
+  const submittingRef = useRef(false);
+
+  const sessionTimerKey = quiz?.id && currentUser?.id ? `quiz_timer_${quiz.id}_${currentUser.id}` : null;
+
+  // Auto-submit when exam time expires
+  const handleTimeExpired = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setAutoSubmittedByTimeout(true);
+
+    if (sessionTimerKey && typeof window !== "undefined") {
+      sessionStorage.removeItem(sessionTimerKey);
+    }
+
+    const finalAnswers = { ...answersRef.current };
+    const curIdx = currentQRef.current;
+    if (selectedChoiceRef.current !== null && questions[curIdx]) {
+      finalAnswers[questions[curIdx].id] = selectedChoiceRef.current;
+    }
+
+    let correct = 0;
+    questions.forEach(q => {
+      const chosen = finalAnswers[q.id];
+      const choicesList = (examChoices || []).filter(c => String(c.questionId) === String(q.id));
+      const correctChoice = choicesList.find(c => c.isCorrect);
+      if (chosen && correctChoice && String(chosen) === String(correctChoice.id)) correct++;
+    });
+
+    const pct    = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+    const passed = pct >= (quiz?.passPercentage || 50);
+
+    try {
+      await submitQuizAttempt({
+        userId: currentUser?.id,
+        lessonQuizId: quiz.id,
+        score: pct,
+        passed,
+        answers: finalAnswers,
+        canRetryAt: passed ? null : new Date(Date.now() + (quiz?.retryHours || 4) * 3600 * 1000).toISOString(),
+      });
+    } catch (e) {
+      console.error("Auto-submit quiz attempt failed:", e);
+    }
+
+    setAnswers(finalAnswers);
+    setScore(pct);
+    setPhase("result");
+    setSubmitting(false);
+    submittingRef.current = false;
+  }, [questions, examChoices, quiz, currentUser, submitQuizAttempt, sessionTimerKey]);
+
+  // Exam Countdown Timer Effect
+  useEffect(() => {
+    if (phase !== "quiz" || durationMinutes <= 0) return;
+
+    let expiresAt = null;
+    if (sessionTimerKey && typeof window !== "undefined") {
+      const saved = sessionStorage.getItem(sessionTimerKey);
+      if (saved) {
+        expiresAt = parseInt(saved, 10);
+      } else {
+        expiresAt = Date.now() + durationMinutes * 60 * 1000;
+        sessionStorage.setItem(sessionTimerKey, String(expiresAt));
+      }
+    } else {
+      expiresAt = Date.now() + durationMinutes * 60 * 1000;
+    }
+
+    const checkTime = () => {
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        setTimeLeftMs(0);
+        handleTimeExpired();
+        return;
+      }
+      setTimeLeftMs(remaining);
+    };
+
+    checkTime();
+    const interval = setInterval(checkTime, 1000);
+    return () => clearInterval(interval);
+  }, [phase, durationMinutes, sessionTimerKey, handleTimeExpired]);
 
   useEffect(() => {
     if (phase !== "quiz") return;
     const block = () => {
       window.history.pushState(null, "", window.location.href);
-      alert("لا يمكنك مغادرة الاختبار. يجب إنهاء جميع الأسئلة.");
+      alert("لا يمكنك مغادرة الاختبار أثناء جريان المؤقت. يجب إنهاء جميع الأسئلة أو انتظار انتهاء الوقت.");
     };
     window.history.pushState(null, "", window.location.href);
     window.addEventListener("popstate", block);
@@ -148,6 +246,12 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
     setAnswers({});
     setCurrentQ(0);
     setSelected(null);
+    setAutoSubmittedByTimeout(false);
+    if (durationMinutes > 0 && sessionTimerKey && typeof window !== "undefined") {
+      const expiresAt = Date.now() + durationMinutes * 60 * 1000;
+      sessionStorage.setItem(sessionTimerKey, String(expiresAt));
+      setTimeLeftMs(durationMinutes * 60 * 1000);
+    }
     setPhase("quiz");
   };
 
@@ -161,6 +265,10 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
       setCurrentQ(q => q + 1);
       setSelected(null);
     } else {
+      if (sessionTimerKey && typeof window !== "undefined") {
+        sessionStorage.removeItem(sessionTimerKey);
+      }
+      submittingRef.current = true;
       setSubmitting(true);
       let correct = 0;
       questions.forEach(q => {
@@ -182,7 +290,21 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
       setScore(pct);
       setPhase("result");
       setSubmitting(false);
+      submittingRef.current = false;
     }
+  };
+
+  const formatTimeLeft = (ms) => {
+    if (ms === null || ms <= 0) return "00:00";
+    const totalSecs = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSecs / 3600);
+    const mins  = Math.floor((totalSecs % 3600) / 60);
+    const secs  = totalSecs % 60;
+    const pad   = n => String(n).padStart(2, "0");
+    if (hours > 0) {
+      return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    }
+    return `${pad(mins)}:${pad(secs)}`;
   };
 
   if (!quiz || !bank || questions.length === 0) {
@@ -248,25 +370,34 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
         <h3 className="text-2xl font-black text-white mb-1">{bank.name}</h3>
         <p className="text-slate-400 font-bold text-sm">{bank.subjectName}</p>
       </div>
-      <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
+      <div className={`grid ${durationMinutes > 0 ? "grid-cols-4" : "grid-cols-3"} gap-2.5 w-full max-w-sm`}>
         {[
           { value: questions.length,           label: "سؤال",  color: "text-white" },
+          ...(durationMinutes > 0 ? [{ value: `${durationMinutes} د`, label: "المدة", color: "text-amber-400" }] : []),
           { value: `${quiz.passPercentage||50}%`, label: "للنجاح", color: "text-[#C4963A]" },
           { value: `${quiz.retryHours||4}h`,   label: "إعادة", color: "text-orange-400" },
         ].map((s, i) => (
-          <div key={i} className="bg-slate-800/60 border border-white/5 rounded-2xl p-4 text-center">
-            <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+          <div key={i} className="bg-slate-800/60 border border-white/5 rounded-2xl p-3 text-center">
+            <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
             <p className="text-[11px] text-slate-400 font-bold mt-0.5">{s.label}</p>
           </div>
         ))}
       </div>
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 max-w-xs text-right">
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 max-w-sm text-right space-y-2">
         <div className="flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-amber-300 text-sm font-bold leading-relaxed">
+          <p className="text-amber-300 text-xs font-bold leading-relaxed">
             لا يمكنك مغادرة الاختبار بعد بدئه. اختر إجابتك وانتقل للسؤال التالي، وستظهر النتيجة في نهاية الاختبار.
           </p>
         </div>
+        {durationMinutes > 0 && (
+          <div className="flex items-start gap-2 pt-2 border-t border-amber-500/20">
+            <Clock className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+            <p className="text-orange-300 text-xs font-bold leading-relaxed">
+              ⏱️ مدة الامتحان: <span className="font-black text-white underline">{durationMinutes} دقيقة</span>. سيتم قفل الاختبار وتسليم إجاباتك تلقائياً فور نفاد الوقت.
+            </p>
+          </div>
+        )}
       </div>
       <button onClick={startQuiz} className="flex items-center gap-3 px-10 py-4 bg-gradient-to-r from-[#C4963A] to-[#D4A84A] hover:from-[#b8872e] text-white font-black rounded-2xl shadow-xl shadow-[#C4963A]/25 transition-all active:scale-95 text-lg cursor-pointer">
         <Play className="w-5 h-5 fill-current" /> ابدأ الاختبار
@@ -282,7 +413,37 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
     const labels  = ["أ", "ب", "ج", "د", "هـ", "و"];
 
     return (
-      <div dir="rtl" className="space-y-5">
+      <div dir="rtl" className="space-y-4">
+        {/* شريط عداد الوقت المحدد للامتحان */}
+        {durationMinutes > 0 && timeLeftMs !== null && (
+          <div className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 shadow-lg ${
+            timeLeftMs <= 120000
+              ? "bg-gradient-to-r from-red-950/90 to-rose-900/80 border-red-500/60 shadow-red-500/20 animate-pulse text-red-200"
+              : "bg-slate-900/90 border-[#C4963A]/30 text-amber-300"
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                timeLeftMs <= 120000 ? "bg-red-500/20 text-red-400" : "bg-[#C4963A]/20 text-[#C4963A]"
+              }`}>
+                <Clock className={`w-5 h-5 ${timeLeftMs <= 120000 ? "animate-bounce" : ""}`} />
+              </div>
+              <div className="text-right">
+                <p className={`text-xs font-black ${timeLeftMs <= 120000 ? "text-red-300" : "text-white"}`}>
+                  {timeLeftMs <= 120000 ? "⚠️ انتبه! أوشك الوقت على الانتهاء" : "الوقت المتبقي للامتحان"}
+                </p>
+                <p className="text-[10px] text-slate-400 font-bold">
+                  {timeLeftMs <= 120000 ? "سيتم قفل الاختبار وتسليم الإجابات تلقائياً" : `مدة الامتحان: ${durationMinutes} دقيقة`}
+                </p>
+              </div>
+            </div>
+            <div className={`font-mono font-black text-2xl tracking-widest px-3 py-1.5 rounded-xl ${
+              timeLeftMs <= 120000 ? "bg-red-900/60 text-red-200 border border-red-500/50" : "bg-black/50 text-[#C4963A] border border-white/5"
+            }`}>
+              {formatTimeLeft(timeLeftMs)}
+            </div>
+          </div>
+        )}
+
         <ProgressBar current={currentQ + 1} total={questions.length} />
 
         <div
@@ -374,6 +535,12 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
     if (passed) {
       return (
         <div className="space-y-6 text-center" dir="rtl">
+          {autoSubmittedByTimeout && (
+            <div className="bg-amber-500/15 border border-amber-500/30 rounded-2xl p-4 text-center text-amber-300 font-bold text-sm flex items-center justify-center gap-2">
+              <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+              <span>انتهى الوقت المحدد للاختبار! تم اعتماد وتسليم إجاباتك المسجلة تلقائياً.</span>
+            </div>
+          )}
           {/* دائرة النتيجة */}
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="relative">
@@ -489,6 +656,12 @@ export default function QuizComponent({ lessonQuizId, lessonId, onPassed, onClos
     // ── في حالة الرسوب: يظهر فقط أنه راسب بدون أي تفاصيل للأسئلة أو الإجابات ──
     return (
       <div className="flex flex-col items-center gap-6 py-8 text-center" dir="rtl">
+        {autoSubmittedByTimeout && (
+          <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 text-center text-red-300 font-bold text-sm flex items-center justify-center gap-2 w-full max-w-sm">
+            <Clock className="w-5 h-5 text-red-400 shrink-0" />
+            <span>انتهى الوقت المحدد للاختبار! تم تسليم الامتحان تلقائياً.</span>
+          </div>
+        )}
         <div className="w-24 h-24 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center">
           <XCircle className="w-12 h-12 text-red-400" />
         </div>

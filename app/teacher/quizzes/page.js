@@ -48,6 +48,7 @@ export default function TeacherQuizzesPage() {
   const [linkLessonId, setLinkLessonId] = useState("");
   const [linkPassPercentage, setLinkPassPercentage] = useState(50);
   const [linkRetryHours, setLinkRetryHours] = useState(4);
+  const [linkDurationMinutes, setLinkDurationMinutes] = useState(0);
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -182,6 +183,7 @@ export default function TeacherQuizzesPage() {
       examBankId: selectedBankToLink.id,
       passPercentage: parseInt(linkPassPercentage, 10),
       retryHours: parseInt(linkRetryHours, 10),
+      durationMinutes: parseInt(linkDurationMinutes, 10) || 0,
       locksNextLessons: true,
     };
     if (existing) {
@@ -295,6 +297,7 @@ export default function TeacherQuizzesPage() {
                         setLinkLessonId(linkedLesson ? String(linkedLesson.id) : "");
                         setLinkPassPercentage(linkedLessonQuiz?.passPercentage || 50);
                         setLinkRetryHours(linkedLessonQuiz?.retryHours || 4);
+                        setLinkDurationMinutes(linkedLessonQuiz?.durationMinutes ?? linkedLessonQuiz?.duration_minutes ?? 0);
                         setLinkModal(true);
                       }}
                       className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#1B3668] hover:text-white text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5"
@@ -538,6 +541,47 @@ export default function TeacherQuizzesPage() {
                   onChange={(e) => setLinkRetryHours(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl p-3 text-sm font-bold focus:border-[#C4963A] outline-none"
                 />
+              </div>
+
+              {/* مدة الامتحان بالدقائق */}
+              <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#C4963A]" />
+                    مدة الامتحان (إجبار الطالب على وقت محدد):
+                  </label>
+                  <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                    {Number(linkDurationMinutes) > 0 ? `${linkDurationMinutes} دقيقة` : "مفتوح"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="360"
+                    value={linkDurationMinutes}
+                    onChange={(e) => setLinkDurationMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="0 = بدون وقت"
+                    className="w-28 border border-slate-300 rounded-xl p-2 font-black text-sm bg-white text-center focus:border-[#C4963A] outline-none"
+                  />
+                  <span className="text-xs font-bold text-slate-500">دقائق</span>
+                </div>
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {[0, 10, 15, 20, 30, 45, 60].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setLinkDurationMinutes(mins)}
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                        Number(linkDurationMinutes) === mins
+                          ? "bg-[#C4963A] text-white"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {mins === 0 ? "بدون وقت" : `${mins} د`}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">

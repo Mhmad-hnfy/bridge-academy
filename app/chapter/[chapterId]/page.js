@@ -311,8 +311,14 @@ function ChapterLessonsContent({ params }) {
                               <p className="text-white font-black text-sm">
                                 كويز إجباري قبل الدرس التالي
                               </p>
-                              <p className="text-slate-300 text-xs font-bold">
-                                يجب الحصول على {quiz.passPercentage || 50}% للمتابعة
+                              <p className="text-slate-300 text-xs font-bold flex items-center gap-2 flex-wrap">
+                                <span>يجب الحصول على {quiz.passPercentage || 50}% للمتابعة</span>
+                                {(Number(quiz.durationMinutes || quiz.duration_minutes) > 0) && (
+                                  <>
+                                    <span className="text-white/40">•</span>
+                                    <span className="text-amber-400 font-black">⏱️ المدة: {quiz.durationMinutes || quiz.duration_minutes} دقيقة</span>
+                                  </>
+                                )}
                               </p>
                             </div>
                           </div>
